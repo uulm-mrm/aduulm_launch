@@ -1,0 +1,3 @@
+repositories:
+  - url: "ssh://git@mrm-git.e-technik.uni-ulm.de:7678/aduulm/source/aduulm_cmake_tools.git"
+    branch: develop
