@@ -5,7 +5,7 @@ project(aduulm_launch_lib)
 find_package(aduulm_cmake_tools REQUIRED)
 get_version_string_from_package_xml(.)
 show_build_info("library")
-setup_git_hooks()
+setup_git_hooks(py_FORMATTERS "autopep8")
 
 # install python code
 # PYTHON_INSTALL_DIR is defined by aduulm_cmake_tools
