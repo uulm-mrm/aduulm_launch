@@ -156,7 +156,7 @@ class LaunchConfig:
     def iter_groups(self) -> Generator[Tuple[str, LaunchConfig], None, None]:
         assert self._getval() is None
         for key, mod in self._getdata().modules.items():
-            if not isinstance(mod, LaunchGroup):
+            if isinstance(mod, LaunchGroup):
                 yield key, self.group(key)
 
     def __iter__(self) -> Generator[str, None, None]:
@@ -178,11 +178,11 @@ class LaunchConfig:
 
     def __getattr__(self, key):
         assert self._getval() is None
-        if key not in self._getconfig()._getdata().modules:
+        if key not in self._getdata().modules:
             raise AttributeError(key)
-        val = self._getconfig()._getdata().modules[key]
+        val = self._getdata().modules[key]
         if isinstance(val, LaunchGroup):
-            return LaunchConfig(self._getconfig().group(key))
+            return self.group(key)
         self._val = val
         return self
 
@@ -199,7 +199,7 @@ class LaunchConfig:
 
     def get_group(self):
         assert self._getval() is None
-        return self._getconfig()
+        return self
 
     def get_executable(self):
         val = self._getval()
