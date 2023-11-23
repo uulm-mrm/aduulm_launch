@@ -18,4 +18,4 @@ class LaunchConfigTest(unittest.TestCase):
                     **node_args, parameters=SaferDict(**params), remappings=SaferDict())
             ))
         ))
-        self.assertEqual(config.data, ref)
+        self.assertEqual(config._getdata(), ref)

@@ -23,7 +23,7 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
             for key, child in mod.modules.items():
                 recurse(config, child, key, group_modules)
             if name is not None:
-                arg_name = 'launch_' + '__'.join(config.path)
+                arg_name = 'launch_' + '__'.join(config._getpath())
                 modules.extend([
                     DeclareLaunchArgument(arg_name, default_value='true'),
                     GroupAction(
@@ -40,7 +40,7 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
                 modules.extend(group_modules)
             return
         assert isinstance(name, str)
-        arg_name = 'launch_' + '__'.join(config.path + [name])
+        arg_name = 'launch_' + '__'.join(config._getpath() + [name])
         arg = DeclareLaunchArgument(arg_name, default_value=str(mod.enabled))
         modules.append(arg)
 
@@ -90,6 +90,6 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
             assert False
 
     modules = []
-    recurse(config, config.data, None, modules)
+    recurse(config, config._getdata(), None, modules)
     desc = LaunchDescription(modules)
     return desc
