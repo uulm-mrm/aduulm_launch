@@ -77,7 +77,7 @@ class SaferDict(Generic[K, V]):
 
 @dataclass(slots=True)
 class Executable(Enableable):
-    executable_name: str
+    executable: str
     args: List[str] = field(default_factory=list)
     output: str = 'screen'
     emulate_tty: bool = True
@@ -87,8 +87,8 @@ class Executable(Enableable):
 
 @dataclass(slots=True)
 class Node(Enableable):
-    package_name: str
-    executable_name: str
+    package: str
+    executable: str
     parameters: SaferDict[str, Any] = field(default_factory=SaferDict)
     remappings: SaferDict[str, Topic] = field(default_factory=SaferDict)
     output: str = 'screen'
@@ -99,8 +99,8 @@ class Node(Enableable):
 
 @dataclass(slots=True)
 class SubLaunchROS(Enableable):
-    package_name: str
-    launch_filename: str
+    package: str
+    launchfile: str
     args: SaferDict[str, Any] = field(default_factory=SaferDict)
 
 

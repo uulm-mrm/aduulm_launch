@@ -1,13 +1,13 @@
 import unittest
 from aduulm_launch_lib_py.launch_config import LaunchConfig, SaferDict
 from aduulm_launch_lib_py.types import LaunchGroup, Node
-from typing import Any
+from typing import Any, cast
 
 
 class LaunchConfigTest(unittest.TestCase):
     def _add_test_node(self, config: LaunchConfig):
         node_args: dict[str, Any] = dict(
-            package_name='test_package', executable_name='test_executable')
+            package='test_package', executable='test_executable')
         params: dict[str, Any] = dict(arg1='value1')
         config.add_node(name='test_node', **node_args, parameters=params)
         return node_args, params
@@ -29,7 +29,8 @@ class LaunchConfigTest(unittest.TestCase):
         config = LaunchConfig()
         with config.group('test'):
             self._add_test_node(config)
-        node = config._getdata().modules['test'].modules['test_node']
+        node = cast(Node, cast(
+            LaunchGroup, config._getdata().modules['test']).modules['test_node'])
         self.assertFalse(node.enabled)
         config.enable_all()
         self.assertTrue(node.enabled)
@@ -74,4 +75,4 @@ class LaunchConfigTest(unittest.TestCase):
         self.assertEqual(
             config.test.test2.test_node.get_node().parameters['arg1'], 'value1')
         self.assertEqual(
-            config.test.test2.test_node.get_leaf().parameters['arg1'], 'value1')
+            cast(Node, config.test.test2.test_node.get_leaf()).parameters['arg1'], 'value1')

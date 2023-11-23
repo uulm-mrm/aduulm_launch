@@ -65,19 +65,19 @@ class LaunchConfig:
                 f'trying to add {name} to current group, but something already exists there! {self._data.modules[name]}')
         self._getdata().modules.add(name, child)
 
-    def add_sublaunch_ros(self, name: str, package_name: str, launch_filename: str, args: Dict[str, Any] = {}):
+    def add_sublaunch_ros(self, name: str, package: str, launchfile: str, args: Dict[str, Any] = {}):
         assert self._getval() is None
-        self.add(name, SubLaunchROS(package_name,
-                 launch_filename, args=SaferDict(**args)))
+        self.add(name, SubLaunchROS(package,
+                 launchfile, args=SaferDict(**args)))
 
     def exec_sublaunch_lazy(self, name: str, func: ConfigGeneratorFunc, **args: Any):
         assert self._getval() is None
         self.add(name, SubLaunchExecLazy(func, args=SaferDict(**args)))
 
-    def add_node(self, name: str, package_name: str, executable_name: str, remappings: Dict[str, Topic] = {},
+    def add_node(self, name: str, package: str, executable: str, remappings: Dict[str, Topic] = {},
                  parameters: Dict[str, Any] = {}, output: str = 'screen', emulate_tty: bool = True):
         assert self._getval() is None
-        self.add(name, Node(package_name, executable_name, remappings=SaferDict(**remappings),
+        self.add(name, Node(package, executable, remappings=SaferDict(**remappings),
                             parameters=SaferDict(**parameters), output=output, emulate_tty=emulate_tty))
 
     def evaluate(self):
@@ -90,9 +90,9 @@ class LaunchConfig:
                 # TODO set submodules enabled based on sublaunch enabled
         self.recurse(do_evaluate)
 
-    def add_executable(self, name: str, executable_name: str, args: List[str] = [], output: str = 'screen', emulate_tty: bool = True):
+    def add_executable(self, name: str, executable: str, args: List[str] = [], output: str = 'screen', emulate_tty: bool = True):
         assert self._getval() is None
-        self.add(name, Executable(executable_name, args=args[:],
+        self.add(name, Executable(executable, args=args[:],
                  output=output, emulate_tty=emulate_tty))
 
     def enable_all(self):

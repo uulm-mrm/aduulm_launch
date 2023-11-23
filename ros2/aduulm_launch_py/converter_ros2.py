@@ -61,9 +61,9 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
             desc = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
-                        get_package_share_directory(mod.package_name),
+                        get_package_share_directory(mod.package),
                         'launch',
-                        mod.launch_filename
+                        mod.launchfile
                     )
                 ),
                 launch_arguments=mod.args.items(),
@@ -72,14 +72,14 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
             modules.append(desc)
         elif isinstance(mod, Executable):
             desc = ExecuteProcess(
-                cmd=[mod.executable_name, *mod.args],
+                cmd=[mod.executable, *mod.args],
                 **handle_common(mod)
             )
             modules.append(desc)
         elif isinstance(mod, Node):
             desc = ROSNode(
-                package=mod.package_name,
-                executable=mod.executable_name,
+                package=mod.package,
+                executable=mod.executable,
                 parameters=[mod.parameters.todict()],
                 remappings=mod.remappings.items(),
                 **handle_common(mod)
