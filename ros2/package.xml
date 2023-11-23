@@ -10,6 +10,7 @@
 
     <depend>aduulm_launch_lib</depend>
     <depend>aduulm_cmake_tools</depend>
+    <exec_depend>aduulm_tools</exec_depend>
 
     <export>
         <build_type>ament_cmake</build_type>
