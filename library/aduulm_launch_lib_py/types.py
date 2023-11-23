@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Any
+from typing import Dict, Any, List
 from typing import TypeVar, Generic, Callable
 
 Topic = str
@@ -81,6 +81,8 @@ class Executable_(Enableable):
     args: List[str] = field(default_factory=list)
     output: str = 'screen'
     emulate_tty: bool = True
+    xterm: bool = False
+    gdb: bool = False
 
 
 @dataclass(slots=True)
@@ -91,6 +93,8 @@ class RunNode_(Enableable):
     remappings: SaferDict[str, Topic] = field(default_factory=SaferDict)
     output: str = 'screen'
     emulate_tty: bool = True
+    xterm: bool = False
+    gdb: bool = False
 
 
 @dataclass(slots=True)

@@ -41,8 +41,22 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
             return
         assert isinstance(name, str)
         arg_name = 'launch_' + '__'.join(config.path + [name])
-        arg = DeclareLaunchArgument(arg_name, default_value=str(mod.enabled)),
+        arg = DeclareLaunchArgument(arg_name, default_value=str(mod.enabled))
         modules.append(arg)
+
+        def handle_common(mod: Executable_ | RunNode_) -> dict[str, Any]:
+            prefix = ''
+            if mod.xterm:
+                prefix += 'xterm -maximized -bg black -fg white -hold -sl 100000 -e '
+            if mod.gdb:
+                prefix += 'gdb -ex run --args'
+            return dict(
+                name=name,
+                output=mod.output,
+                emulate_tty=mod.emulate_tty,
+                prefix=prefix,
+                condition=IfCondition(LaunchConfiguration(arg_name))
+            )
         if isinstance(mod, SubLaunchROS_):
             desc = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
@@ -58,22 +72,17 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
             modules.append(desc)
         elif isinstance(mod, Executable_):
             desc = ExecuteProcess(
-                name=name,
                 cmd=[mod.executable_name, *mod.args],
-                output='screen',
-                emulate_tty=True,
-                condition=IfCondition(LaunchConfiguration(arg_name))
+                **handle_common(mod)
             )
             modules.append(desc)
         elif isinstance(mod, RunNode_):
             desc = Node(
-                name=name,
                 package=mod.package_name,
                 executable=mod.executable_name,
-                output='screen',
-                emulate_tty=True,
                 parameters=[mod.parameters.todict()],
-                condition=IfCondition(LaunchConfiguration(arg_name))
+                remappings=mod.remappings.items(),
+                **handle_common(mod)
             )
             modules.append(desc)
         else:

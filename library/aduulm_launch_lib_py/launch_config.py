@@ -49,7 +49,7 @@ class LaunchConfig:
                 f'trying to add {name} to current group, but something already exists there! {self.data.modules[name]}')
         self.data.modules.add(name, child)
 
-    def add_sublaunch_ros(self, name: str, package_name: str, launch_filename: str, args: Dict[str, Any]):
+    def add_sublaunch_ros(self, name: str, package_name: str, launch_filename: str, args: Dict[str, Any] = {}):
         self.add(name, SubLaunchROS_(package_name,
                  launch_filename, args=SaferDict(**args)))
 
