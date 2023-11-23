@@ -1,3 +1,4 @@
+/run_hooks
 docs/
 src/*
 cfg/cpp/

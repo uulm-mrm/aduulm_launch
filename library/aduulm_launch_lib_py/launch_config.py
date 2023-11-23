@@ -36,7 +36,8 @@ class LaunchConfig:
         if group_name in data.modules:
             group = data.modules[group_name]
             if not isinstance(group, LaunchGroup):
-                raise Exception(f'trying to enter group {group_name}, but it already exists and is not a group! Type: {type(group)}')
+                raise Exception(
+                    f'trying to enter group {group_name}, but it already exists and is not a group! Type: {type(group)}')
         else:
             group = LaunchGroup()
             data.modules.add(group_name, group)
@@ -44,11 +45,13 @@ class LaunchConfig:
 
     def add(self, name: str, child: LeafLaunch):
         if name in self.data.modules:
-            raise Exception(f'trying to add {name} to current group, but something already exists there! {self.data.modules[name]}')
+            raise Exception(
+                f'trying to add {name} to current group, but something already exists there! {self.data.modules[name]}')
         self.data.modules.add(name, child)
 
-    def add_sublaunch_ros(self, name: str, package_name: str, launch_filename: str, **kwargs: Any):
-        self.add(name, SubLaunchROS_(package_name, launch_filename, args=SaferDict(**kwargs)))
+    def add_sublaunch_ros(self, name: str, package_name: str, launch_filename: str, args: Dict[str, Any]):
+        self.add(name, SubLaunchROS_(package_name,
+                 launch_filename, args=SaferDict(**args)))
 
     def exec_sublaunch(self, func: ConfigGeneratorFunc, **args: Any):
         func(self, **args)
@@ -56,8 +59,10 @@ class LaunchConfig:
     def exec_sublaunch_lazy(self, name: str, func: ConfigGeneratorFunc, **args: Any):
         self.add(name, SubLaunchExecLazy_(func, args=SaferDict(**args)))
 
-    def add_node(self, name: str, package_name: str, executable_name: str, remappings: Dict[str, Topic] = {}, **parameters: Any):
-        self.add(name, RunNode_(package_name, executable_name, remappings=SaferDict(**remappings), parameters=SaferDict(**parameters)))
+    def add_node(self, name: str, package_name: str, executable_name: str, remappings: Dict[str, Topic] = {},
+                 parameters: Dict[str, Any] = {}, output: str = 'screen', emulate_tty: bool = True):
+        self.add(name, RunNode_(package_name, executable_name, remappings=SaferDict(**remappings),
+                                parameters=SaferDict(**parameters), output=output, emulate_tty=emulate_tty))
 
     def evaluate(self):
         def do_evaluate(config: LaunchConfig, mod: LeafLaunch, name: str, parent: LaunchGroup):
@@ -66,8 +71,9 @@ class LaunchConfig:
                 mod.func(config, **mod.args)
         self.recurse(do_evaluate)
 
-    def add_executable(self, name: str, executable_name: str, **args: Any):
-        self.add(name, Executable_(executable_name, args=SaferDict(**args)))
+    def add_executable(self, name: str, executable_name: str, args: List[str] = [], output: str = 'screen', emulate_tty: bool = True):
+        self.add(name, Executable_(executable_name, args=args,
+                 output=output, emulate_tty=emulate_tty))
 
     def enable_all(self):
         self.set_enabled(True)
@@ -77,7 +83,8 @@ class LaunchConfig:
 
     def recurse(self, cb_leaf: RecurseLeafFunc, cb_enter: Optional[RecurseEnterFunc] = None, cb_exit:
                 Optional[RecurseExitFunc] = None):
-        self._do_recurse(self, self.data, None, None, cb_leaf, cb_enter, cb_exit)
+        self._do_recurse(self, self.data, None, None,
+                         cb_leaf, cb_enter, cb_exit)
 
     def _do_recurse(self, config: LaunchConfig, mod: AnyLaunch, name: Optional[str], parent: Optional[LaunchGroup],
                     cb_leaf: RecurseLeafFunc, cb_enter: Optional[RecurseEnterFunc] = None, cb_exit: Optional[RecurseExitFunc] = None):
@@ -89,11 +96,13 @@ class LaunchConfig:
                     cb_enter(config, mod, name, parent)
             old_keys = set(mod.modules.keys())
             for key in old_keys:
-                self._do_recurse(config, mod.modules[key], key, mod, cb_leaf, cb_enter)
+                self._do_recurse(
+                    config, mod.modules[key], key, mod, cb_leaf, cb_enter)
             # in case new modules were added
             new_keys = set(mod.modules.keys())
             for key in new_keys-old_keys:
-                self._do_recurse(config, mod.modules[key], key, mod, cb_leaf, cb_enter)
+                self._do_recurse(
+                    config, mod.modules[key], key, mod, cb_leaf, cb_enter)
             if name is not None and cb_exit is not None:
                 cb_exit(old_config, mod, name, parent)
         else:
@@ -128,7 +137,9 @@ class LaunchConfig:
 
 
 RecurseLeafFunc = Callable[[LaunchConfig, LeafLaunch, str, LaunchGroup], None]
-RecurseEnterFunc = Callable[[LaunchConfig, LaunchGroup, str, Optional[LaunchGroup]], None]
-RecurseExitFunc = Callable[[LaunchConfig, LaunchGroup, str, Optional[LaunchGroup]], None]
+RecurseEnterFunc = Callable[[LaunchConfig,
+                             LaunchGroup, str, Optional[LaunchGroup]], None]
+RecurseExitFunc = Callable[[LaunchConfig,
+                            LaunchGroup, str, Optional[LaunchGroup]], None]
 P = ParamSpec('P')
 ConfigGeneratorFunc = Callable[Concatenate[LaunchConfig, P], None]
