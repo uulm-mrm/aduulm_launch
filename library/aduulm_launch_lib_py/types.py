@@ -76,7 +76,7 @@ class SaferDict(Generic[K, V]):
 
 
 @dataclass(slots=True)
-class Executable_(Enableable):
+class Executable(Enableable):
     executable_name: str
     args: List[str] = field(default_factory=list)
     output: str = 'screen'
@@ -86,7 +86,7 @@ class Executable_(Enableable):
 
 
 @dataclass(slots=True)
-class RunNode_(Enableable):
+class Node(Enableable):
     package_name: str
     executable_name: str
     parameters: SaferDict[str, Any] = field(default_factory=SaferDict)
@@ -98,7 +98,7 @@ class RunNode_(Enableable):
 
 
 @dataclass(slots=True)
-class SubLaunchROS_(Enableable):
+class SubLaunchROS(Enableable):
     package_name: str
     launch_filename: str
     args: SaferDict[str, Any] = field(default_factory=SaferDict)
@@ -108,35 +108,19 @@ ConfigGeneratorFuncAny = Callable[..., None]
 
 
 @dataclass(slots=True)
-class SubLaunchExecLazy_(Enableable):
+class SubLaunchExecLazy(Enableable):
     func: ConfigGeneratorFuncAny
     args: SaferDict[str, Any] = field(default_factory=SaferDict)
 
 
-SubLaunch_ = SubLaunchROS_ | SubLaunchExecLazy_
+SubLaunch = SubLaunchROS | SubLaunchExecLazy
 
 
 @dataclass
 class LaunchGroup:
-    modules: SaferDict[str, 'Executable_ | RunNode_ | SubLaunch_ | LaunchGroup'] = field(
+    modules: SaferDict[str, 'Executable | Node | SubLaunch | LaunchGroup'] = field(
         default_factory=SaferDict)
 
 
-def Executable(executable_name: str, args: List[Any] = [], output: str = 'screen', emulate_tty: bool = True):
-    return Executable_(executable_name, args=args, output=output, emulate_tty=emulate_tty)
-
-
-def RunNode(package_name: str, executable_name: str, remappings: Dict[str, Topic] = {}, parameters: Dict[str, Any] = {}, output: str = 'screen', emulate_tty: bool = True):
-    return RunNode_(package_name, executable_name, remappings=SaferDict(**remappings), parameters=SaferDict(**parameters), output=output, emulate_tty=emulate_tty)
-
-
-def SubLaunchROS(package_name: str, launch_filename: str, **args: Any):
-    return SubLaunchROS_(package_name, launch_filename, args=SaferDict(**args))
-
-
-def SubLaunchExecLazy(func: ConfigGeneratorFuncAny, **args: Any):
-    return SubLaunchExecLazy_(func, args=SaferDict(**args))
-
-
-LeafLaunch = Executable_ | RunNode_ | SubLaunch_
+LeafLaunch = Executable | Node | SubLaunch
 AnyLaunch = LeafLaunch | LaunchGroup
