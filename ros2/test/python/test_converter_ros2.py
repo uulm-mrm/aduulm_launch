@@ -21,8 +21,8 @@ class ConverterRos2Test(unittest.TestCase):
         context = LaunchContext()
         nodes = res.visit(context)
         assert (nodes is not None)
-        self.assertEqual(len(nodes), 2)
-        ga = nodes[1]
+        self.assertEqual(len(nodes), 1)
+        ga = nodes[0]
         assert isinstance(ga, GroupAction)
         ga_entities = ga._GroupAction__actions
         assert (ga_entities is not None)
@@ -48,7 +48,7 @@ class ConverterRos2Test(unittest.TestCase):
         context = LaunchContext()
         nodes = res.visit(context)
         assert (nodes is not None)
-        self.assertEqual(len(nodes), 2)
+        self.assertEqual(len(nodes), 1)
         inc_nodes = [n for n in nodes if isinstance(
             n, IncludeLaunchDescription)]
         self.assertEqual(len(inc_nodes), 1)
@@ -65,7 +65,7 @@ class ConverterRos2Test(unittest.TestCase):
         context = LaunchContext()
         nodes = res.visit(context)
         assert (nodes is not None)
-        self.assertEqual(len(nodes), 2)
+        self.assertEqual(len(nodes), 1)
         proc_nodes = [n for n in nodes if isinstance(n, ExecuteProcess)]
         self.assertEqual(len(proc_nodes), 1)
         self.assertIsNotNone(proc_nodes[0].name)

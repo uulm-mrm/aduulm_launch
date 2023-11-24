@@ -12,7 +12,6 @@ import os
 
 
 def convert_config_to_ros2_launch(config: LaunchConfig):
-    config.evaluate()
     modules = []
 
     def recurse(config: LaunchConfig, mod: AnyLaunch, name: Optional[str], modules: List[Any]):
@@ -23,9 +22,7 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
             for key, child in mod.modules.items():
                 recurse(config, child, key, group_modules)
             if name is not None:
-                arg_name = 'launch_' + '__'.join(config._getpath())
                 modules.extend([
-                    DeclareLaunchArgument(arg_name, default_value='true'),
                     GroupAction(
                         actions=[
                             PushRosNamespace(name),
@@ -33,16 +30,12 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
                         ],
                         # scoped=False,
                         # forwarding=False,
-                        condition=IfCondition(LaunchConfiguration(arg_name))
                     )
                 ])
             else:
                 modules.extend(group_modules)
             return
         assert isinstance(name, str)
-        arg_name = 'launch_' + '__'.join(config._getpath() + [name])
-        arg = DeclareLaunchArgument(arg_name, default_value=str(mod.enabled))
-        modules.append(arg)
 
         def handle_common(mod: Executable | Node) -> dict[str, Any]:
             prefix = ''
@@ -55,7 +48,6 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
                 output=mod.output,
                 emulate_tty=mod.emulate_tty,
                 prefix=prefix,
-                condition=IfCondition(LaunchConfiguration(arg_name))
             )
         if isinstance(mod, SubLaunchROS):
             desc = IncludeLaunchDescription(
@@ -66,8 +58,7 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
                         mod.launchfile
                     )
                 ),
-                launch_arguments=mod.args.items(),
-                condition=IfCondition(LaunchConfiguration(arg_name))
+                launch_arguments=mod.args.tostrdict().items(),
             )
             modules.append(desc)
         elif isinstance(mod, Executable):
@@ -80,13 +71,13 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
             desc = ROSNode(
                 package=mod.package,
                 executable=mod.executable,
-                parameters=[mod.parameters.todict()],
+                parameters=[mod.parameters.toparamdict()],
                 remappings=mod.remappings.items(),
+                arguments=mod.args,
                 **handle_common(mod)
             )
             modules.append(desc)
         else:
-            # SubLaunchExecLazy_ must not occur here, because we called evaluate() beforehand!
             assert False
 
     modules = []

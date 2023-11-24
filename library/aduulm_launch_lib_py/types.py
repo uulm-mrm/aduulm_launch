@@ -6,17 +6,6 @@ from typing import TypeVar, Generic, Callable
 Topic = str
 
 
-@dataclass(kw_only=True, slots=True)
-class Enableable:
-    enabled: bool = False
-
-    def enable(self):
-        self.enabled = True
-
-    def disable(self):
-        self.enabled = False
-
-
 K = TypeVar('K')
 V = TypeVar('V')
 
@@ -39,6 +28,16 @@ class SaferDict(Generic[K, V]):
                 f"Could not add argument {key} because it already exists!")
         self._data[key] = value
         return value
+
+    def toparamdict(self):
+        def fix(val):
+            if isinstance(val, bool) or isinstance(val, float):
+                return val
+            return str(val)
+        return {k: fix(v) for k, v in self._data.items()}
+
+    def tostrdict(self):
+        return {k: str(v) for k, v in self._data.items()}
 
     # The following methods are proxies for dict methods.
     # Maybe these could be replaced by inheriting from dict, but the typing seems to require Python >= 3.12
@@ -76,7 +75,7 @@ class SaferDict(Generic[K, V]):
 
 
 @dataclass(slots=True)
-class Executable(Enableable):
+class Executable:
     executable: str
     args: List[str] = field(default_factory=list)
     output: str = 'screen'
@@ -86,11 +85,12 @@ class Executable(Enableable):
 
 
 @dataclass(slots=True)
-class Node(Enableable):
+class Node:
     package: str
     executable: str
     parameters: SaferDict[str, Any] = field(default_factory=SaferDict)
     remappings: SaferDict[str, Topic] = field(default_factory=SaferDict)
+    args: List[str] = field(default_factory=list)
     output: str = 'screen'
     emulate_tty: bool = True
     xterm: bool = False
@@ -98,7 +98,7 @@ class Node(Enableable):
 
 
 @dataclass(slots=True)
-class SubLaunchROS(Enableable):
+class SubLaunchROS:
     package: str
     launchfile: str
     args: SaferDict[str, Any] = field(default_factory=SaferDict)
@@ -107,13 +107,7 @@ class SubLaunchROS(Enableable):
 ConfigGeneratorFuncAny = Callable[..., None]
 
 
-@dataclass(slots=True)
-class SubLaunchExecLazy(Enableable):
-    func: ConfigGeneratorFuncAny
-    args: SaferDict[str, Any] = field(default_factory=SaferDict)
-
-
-SubLaunch = SubLaunchROS | SubLaunchExecLazy
+SubLaunch = SubLaunchROS
 
 
 @dataclass
