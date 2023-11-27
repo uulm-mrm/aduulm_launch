@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Any, List
+from typing import Any, List
 from typing import TypeVar, Generic, Callable
 
 Topic = str
@@ -10,68 +10,37 @@ K = TypeVar('K')
 V = TypeVar('V')
 
 
-class SaferDict(Generic[K, V]):
-    def __init__(self, **kwargs: V):
-        self._data: Dict[K, V] = dict(**kwargs)
+class LaunchConfigException(Exception):
+    pass
 
+
+class SaferDict(Generic[K, V], dict[K, V]):
     # only allow __setitem__ if key already exists
     def __setitem__(self, key: K, value: V):
-        if key not in self._data:
-            raise Exception(
+        if key not in self:
+            raise LaunchConfigException(
                 f"Could not replace argument {key} because it does not exist!")
-        self._data[key] = value
+        super().__setitem__(key, value)
 
     # only allow add if key does not already exist
     def add(self, key: K, value: V):
-        if key in self._data:
-            raise Exception(
+        if key in self:
+            raise LaunchConfigException(
                 f"Could not add argument {key} because it already exists!")
-        self._data[key] = value
+        super().__setitem__(key, value)
         return value
 
     def toparamdict(self):
         def fix(val):
-            if isinstance(val, bool) or isinstance(val, float):
+            if isinstance(val, bool) or isinstance(val, float) or isinstance(val, int):
                 return val
+            if isinstance(val, list) or isinstance(val, tuple):
+                return [fix(v) for v in val]
             return str(val)
-        return {k: fix(v) for k, v in self._data.items()}
+        return {k: fix(v) for k, v in self.items()}
 
     def tostrdict(self):
-        return {k: str(v) for k, v in self._data.items()}
-
-    # The following methods are proxies for dict methods.
-    # Maybe these could be replaced by inheriting from dict, but the typing seems to require Python >= 3.12
-    def todict(self):
-        return self._data
-
-    def __getitem__(self, key: K) -> V:
-        return self._data[key]
-
-    def __iter__(self):
-        return self._data.__iter__()
-
-    def keys(self):
-        return self._data.keys()
-
-    def values(self):
-        return self._data.values()
-
-    def items(self):
-        return self._data.items()
-
-    def __repr__(self):
-        return repr(self._data)
-
-    def __str__(self):
-        return str(self._data)
-
-    def __delitem__(self, key: K):
-        del self._data[key]
-
-    def __eq__(self, other: Any):
-        if isinstance(other, SaferDict):
-            return self._data == other._data
-        return self._data == other
+        return {k: str(v) for k, v in self.items()}
 
 
 @dataclass(slots=True)
@@ -104,17 +73,11 @@ class SubLaunchROS:
     args: SaferDict[str, Any] = field(default_factory=SaferDict)
 
 
-ConfigGeneratorFuncAny = Callable[..., None]
-
-
-SubLaunch = SubLaunchROS
-
-
 @dataclass
 class LaunchGroup:
-    modules: SaferDict[str, 'Executable | Node | SubLaunch | LaunchGroup'] = field(
+    modules: SaferDict[str, 'Executable | Node | SubLaunchROS | LaunchGroup'] = field(
         default_factory=SaferDict)
 
 
-LeafLaunch = Executable | Node | SubLaunch
+LeafLaunch = Executable | Node | SubLaunchROS
 AnyLaunch = LeafLaunch | LaunchGroup

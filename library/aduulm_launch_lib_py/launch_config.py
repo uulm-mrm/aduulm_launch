@@ -1,10 +1,11 @@
 from __future__ import annotations
-from typing import Dict, Any, Tuple, List, Callable, Generator, Optional, Concatenate, ParamSpec
+from typing import Dict, Any, Tuple, List, Callable, Generator, Optional, Concatenate, ParamSpec, cast
 from .types import *
 from dataclasses import fields, _MISSING_TYPE, is_dataclass
 from functools import lru_cache
 import re
 import yaml
+import argparse
 
 
 class LaunchConfig:
@@ -68,7 +69,7 @@ class LaunchConfig:
         if group_name in data.modules:
             group = data.modules[group_name]
             if not isinstance(group, LaunchGroup):
-                raise Exception(
+                raise LaunchConfigException(
                     f'trying to enter group {group_name}, but it already exists and is not a group! Type: {type(group)}')
         else:
             group = LaunchGroup()
@@ -78,7 +79,7 @@ class LaunchConfig:
     def add(self, name: str, child: LeafLaunch):
         assert self._getval() is None
         if name in self._getdata().modules:
-            raise Exception(
+            raise LaunchConfigException(
                 f'trying to add {name} to current group, but something already exists there! {self._data.modules[name]}')
         self._getdata().modules.add(name, child)
 
@@ -86,6 +87,35 @@ class LaunchConfig:
         assert self._getval() is None
         self.add(name, SubLaunchROS(package,
                  launchfile, args=SaferDict(**args)))
+
+    # def _fix_kwargs(self, name: str, kwargs: Any):
+    #     for k, v in kwargs.items():
+    #         if isinstance(v, dict):
+    #             v = SaferDict(**v)
+    #             if k == 'parameters':
+    #                 self._insert_param_overrides(name, v)
+    #             kwargs[k] = v
+    #         elif isinstance(v, list):
+    #             kwargs[k] = v[:]
+
+    # P1 = ParamSpec('P1')
+    # def add_node(self, name: str,
+    #              _constructor: Callable[Concatenate[P1], Node] = Node,
+    #              *args: P1.args,
+    #              **kwargs: P1.kwargs
+    #              ):
+    #     assert self._getval() is None
+    #     self._fix_kwargs(name, kwargs)
+    #     self.add(name, _constructor(*args, **kwargs))
+
+    # def add_executable(self, name: str,
+    #              _constructor: Callable[Concatenate[P1], Executable] = Executable,
+    #              *args: P1.args,
+    #              **kwargs: P1.kwargs
+    #              ):
+    #     assert self._getval() is None
+    #     self._fix_kwargs(name, kwargs)
+    #     self.add(name, _constructor(*args, **kwargs))
 
     def add_node(self, name: str, package: str, executable: str, remappings: Dict[str, Topic] = {},
                  parameters: Dict[str, Any] = {}, args: List[str] = [], output: str = 'screen', emulate_tty: bool = True):
@@ -97,8 +127,8 @@ class LaunchConfig:
 
     def add_executable(self, name: str, executable: str, args: List[str] = [], output: str = 'screen', emulate_tty: bool = True):
         assert self._getval() is None
-        self.add(name, Executable(executable, args=args[:],
-                 output=output, emulate_tty=emulate_tty))
+        self.add(name, Executable(
+            executable, args=args[:], output=output, emulate_tty=emulate_tty))
 
     def recurse(self, cb_leaf: RecurseLeafFunc, cb_enter: Optional[RecurseEnterFunc] = None, cb_exit:
                 Optional[RecurseExitFunc] = None):
@@ -244,10 +274,10 @@ class LaunchConfig:
                 assert not isinstance(field.default_factory, _MISSING_TYPE)
                 default = field.default_factory()
             if not isinstance(v, field.type):
-                raise Exception(
+                raise LaunchConfigException(
                     f'Attribute {field.name} of {params.__class__} was overridden by override {k} with value {v} but type should be {field.type}!')
             if getattr(params, field.name) != default:
-                raise Exception(
+                raise LaunchConfigException(
                     f'Attribute {field.name} of {params.__class__} was already assigned to and can not be overridden by override {k}!')
             setattr(params, field.name, v)
             overrides[k] = (v, usage_cnt+1)
@@ -259,8 +289,8 @@ class LaunchConfig:
     def _check_overrides_counts(self, overrides: Dict[str, Tuple[Any, int]], _type: str):
         unused_overrides = [k for k, (_, e) in overrides.items() if e == 0]
         if len(unused_overrides) != 0:
-            raise Exception(
-                f'The following {_type} overrides were specified but were not applied: {unused_overrides}')
+            raise LaunchConfigException(
+                f'The following {_type} overrides were specified but were not applied. Maybe a typo or someone forgot to call insert_overrides()? {unused_overrides}')
 
     def parse_args(self, args: List[str], params: List[str]):
         def parse(lst: List[str], overrides: Dict[str, Tuple[Any, int]]):
@@ -273,6 +303,13 @@ class LaunchConfig:
 
         parse(args, self._getoverrides())
         parse(params, self._getparam_overrides())
+
+    def parse_argv(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('args', type=str, nargs='*', default=[])
+        parser.add_argument('--params', type=str, nargs='+', default=[])
+        args = parser.parse_args()
+        self.parse_args(args.args, args.params)
 
 
 @lru_cache(maxsize=256, typed=True)
@@ -294,12 +331,12 @@ def matches(key: str, pattern: str):
 
 def check_override_valid(key: str, overrides: Dict[str, Tuple[Any, int]]):
     if key in overrides:
-        raise Exception(f'Override for "{key}" already exists!')
+        raise LaunchConfigException(f'Override for "{key}" already exists!')
     if len([pattern for pattern, _ in overrides.items() if matches(key, pattern)]) > 0:
-        raise Exception(
+        raise LaunchConfigException(
             f'Override for "{key}" is already matched by previous glob patterns!')
     if len([pattern for pattern, _ in overrides.items() if matches(pattern, key)]) > 0:
-        raise Exception(
+        raise LaunchConfigException(
             f'Glob pattern override for "{key}" matches existing patterns!')
 
 
@@ -329,5 +366,3 @@ RecurseEnterFunc = Callable[[LaunchConfig,
                              LaunchGroup, str, Optional[LaunchGroup]], None]
 RecurseExitFunc = Callable[[LaunchConfig,
                             LaunchGroup, str, Optional[LaunchGroup]], None]
-P = ParamSpec('P')
-ConfigGeneratorFunc = Callable[Concatenate[LaunchConfig, P], None]

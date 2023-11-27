@@ -1,6 +1,6 @@
 import unittest
 from aduulm_launch_lib_py.launch_config import LaunchConfig, SaferDict
-from aduulm_launch_lib_py.types import LaunchGroup, Node
+from aduulm_launch_lib_py.types import LaunchGroup, Node, LaunchConfigException
 from typing import Any, cast
 from dataclasses import dataclass
 
@@ -96,7 +96,7 @@ class LaunchConfigTest(unittest.TestCase):
 
         def func():
             config.overrides().test.test2.launch_test_node = True
-        self.assertRaises(Exception, func)
+        self.assertRaises(LaunchConfigException, func)
         self.assertEqual(config._getoverrides()[
                          'test.test2.launch_test_node'], (True, 0))
 
@@ -129,12 +129,13 @@ class LaunchConfigTest(unittest.TestCase):
     def test_throw_overrides_twice(self):
         params = _TestParameters(
             required_arg='val', optional_arg1='other_val', optional_arg2='other_val2')
-        self.assertRaises(Exception, lambda: self._test_overrides(params))
+        self.assertRaises(LaunchConfigException,
+                          lambda: self._test_overrides(params))
 
     def test_throw_overrides_not_applied(self):
         params = _TestParameters2(arg2='val')
         config = self._test_overrides(params)
-        self.assertRaises(Exception, config.check_overrides_counts)
+        self.assertRaises(LaunchConfigException, config.check_overrides_counts)
 
     def _test_wildcard(self, config: LaunchConfig):
         with config.group('test'):
@@ -168,7 +169,7 @@ class LaunchConfigTest(unittest.TestCase):
         params2, params3 = self._test_wildcard(config)
         self.assertEqual(params2.optional_arg, 'val')
         self.assertEqual(params3.optional_arg, 'val')
-        self.assertRaises(Exception, config.check_overrides_counts)
+        self.assertRaises(LaunchConfigException, config.check_overrides_counts)
 
     def _test_param_override(self, config: LaunchConfig):
         with config.group('test'):
@@ -195,13 +196,13 @@ class LaunchConfigTest(unittest.TestCase):
         config = LaunchConfig()
         config.param_overrides().test.use_sim_time = True
         self._test_param_override(config)
-        self.assertRaises(Exception, config.check_overrides_counts)
+        self.assertRaises(LaunchConfigException, config.check_overrides_counts)
 
     def test_param_override_throws2(self):
         config = LaunchConfig()
         config.param_overrides().__.use_sim_time = True
         self._test_param_override(config)
-        self.assertRaises(Exception, lambda: config.test.test2.test_node.get_node(
+        self.assertRaises(LaunchConfigException, lambda: config.test.test2.test_node.get_node(
         ).parameters.add('use_sim_time', True))
 
     def test_param_override_throws3(self):
@@ -210,7 +211,7 @@ class LaunchConfigTest(unittest.TestCase):
         self._test_param_override(config)
         with config.group('test'):
             with config.group('test2'):
-                self.assertRaises(Exception, lambda: self._add_test_node(
+                self.assertRaises(LaunchConfigException, lambda: self._add_test_node(
                     config, params={'use_sim_time': True}))
 
     def test_override_from_argv(self):
