@@ -1,6 +1,5 @@
 import unittest
-from aduulm_launch_lib_py.launch_config import LaunchConfig, SaferDict
-from aduulm_launch_lib_py.types import LaunchGroup, Node, LaunchConfigException
+from aduulm_launch_lib_py.launch_config import LaunchConfig, SaferDict, LaunchGroup, Node, LaunchConfigException
 from typing import Any, cast
 from dataclasses import dataclass
 
@@ -28,18 +27,19 @@ class LaunchConfigTest(unittest.TestCase):
     def _add_test_node(self, config: LaunchConfig, params: dict[str, Any] = dict(arg1='value1')):
         node_args: dict[str, Any] = dict(
             package='test_package', executable='test_executable')
-        config.add_node(name='test_node', **node_args, parameters=params)
-        return node_args, params
+        node = config.add_node(name='test_node', **
+                               node_args, parameters=params)
+        return node_args, params, node
 
     def test_simple(self):
         config = LaunchConfig()
         with config.group('test'):
-            node_args, params = self._add_test_node(config)
+            node_args, params, _ = self._add_test_node(config)
 
         ref = LaunchGroup(modules=SaferDict(
             test=LaunchGroup(modules=SaferDict(
                 test_node=Node(
-                    **node_args, parameters=SaferDict(**params), remappings=SaferDict())
+                    **node_args, parameters=SaferDict(**params))
             ))
         ))
         self.assertEqual(config._getdata(), ref)
@@ -89,6 +89,13 @@ class LaunchConfigTest(unittest.TestCase):
             config.test.test2.test_node.get_node().parameters['arg1'], 'value1')
         self.assertEqual(
             cast(Node, config.test.test2.test_node.get_leaf()).parameters['arg1'], 'value1')
+
+    def test_dot_access_toplevel(self):
+        config = LaunchConfig()
+        self._add_test_node(config)
+        self.assertEqual(
+            config.test_node.get_node().parameters['arg1'], 'value1')
+        self.assertEqual(len(list(config.iter_leaves())), 1)
 
     def test_set_overrides(self):
         config = LaunchConfig()
@@ -228,3 +235,21 @@ class LaunchConfigTest(unittest.TestCase):
         self.assertEqual(
             config.test.test2.test_node.get_node().parameters['use_sim_time'], True)
         config.check_overrides_counts()
+
+    def test_remappings(self):
+        config = LaunchConfig()
+        with config.group('test'):
+            with config.group('test2'):
+                _, _, node = self._add_test_node(config)
+                config.add_subscriber(node, name='sub1', topic='/ns/mysub')
+                config.add_publisher(node, name='pub1', topic='/ns/mypub')
+                config.add_service_client(
+                    node, name='client1', topic='/ns/myclient')
+                config.add_service(node, name='srv1', topic='/ns/mysrv')
+                config.add_timer(node, period=0.1)
+        self.assertEqual(node.get_remappings(), {
+            'sub1': '/ns/mysub',
+            'pub1': '/ns/mypub',
+            'client1': '/ns/myclient',
+            'srv1': '/ns/mysrv',
+        })

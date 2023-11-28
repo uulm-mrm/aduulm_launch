@@ -72,7 +72,7 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
                 package=mod.package,
                 executable=mod.executable,
                 parameters=[mod.parameters.toparamdict()],
-                remappings=mod.remappings.items(),
+                remappings=mod.get_remappings().items(),
                 arguments=mod.args,
                 **handle_common(mod)
             )

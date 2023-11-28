@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import Dict, Any, Tuple, List, Callable, Generator, Optional, Concatenate, ParamSpec, cast
-from .types import *
 from dataclasses import fields, _MISSING_TYPE, is_dataclass
 from functools import lru_cache
 import re
@@ -8,12 +7,146 @@ import yaml
 import argparse
 
 
+from dataclasses import dataclass, field
+from typing import Any, List
+from typing import TypeVar, Generic, Callable, Dict, ParamSpec, Concatenate
+from itertools import chain
+
+Topic = str
+
+
+K = TypeVar('K')
+V = TypeVar('V')
+
+
+class LaunchConfigException(Exception):
+    pass
+
+
+class SaferDict(Generic[K, V], dict[K, V]):
+    # only allow __setitem__ if key already exists
+    def __setitem__(self, key: K, value: V):
+        if key not in self:
+            raise LaunchConfigException(
+                f"Could not replace argument {key} because it does not exist!")
+        super().__setitem__(key, value)
+
+    # only allow add if key does not already exist
+    def add(self, key: K, value: V):
+        if key in self:
+            raise LaunchConfigException(
+                f"Could not add argument {key} because it already exists!")
+        super().__setitem__(key, value)
+        return value
+
+    def toparamdict(self):
+        def fix(val):
+            if isinstance(val, bool) or isinstance(val, float) or isinstance(val, int):
+                return val
+            if isinstance(val, list) or isinstance(val, tuple):
+                return [fix(v) for v in val]
+            return str(val)
+        return {k: fix(v) for k, v in self.items()}
+
+    def tostrdict(self):
+        return {k: str(v) for k, v in self.items()}
+
+
+@dataclass(slots=True)
+class Executable:
+    executable: str
+    args: List[str] = field(default_factory=list)
+    output: str = 'screen'
+    emulate_tty: bool = True
+    xterm: bool = False
+    gdb: bool = False
+    respawn: bool = False
+    respawn_delay: float = 0.0
+
+
+@dataclass(slots=True)
+class PublisherInfo:
+    topic: str
+
+
+@dataclass(slots=True)
+class ServiceClientInfo:
+    topic: str
+
+
+@dataclass(slots=True)
+class SubscriberInfo:
+    topic: str
+    outputs: List[PublisherInfo] = field(default_factory=list)
+    service_calls: List[ServiceClientInfo] = field(default_factory=list)
+    changes_dataprovider_state: bool = False
+
+
+@dataclass(slots=True)
+class ServiceInfo:
+    topic: str
+    outputs: List[PublisherInfo] = field(default_factory=list)
+    service_calls: List[ServiceClientInfo] = field(default_factory=list)
+    changes_dataprovider_state: bool = False
+
+
+@dataclass(slots=True)
+class TimerInfo:
+    period: float
+    outputs: List[PublisherInfo] = field(default_factory=list)
+    service_calls: List[ServiceClientInfo] = field(default_factory=list)
+    changes_dataprovider_state: bool = False
+
+
+@dataclass(slots=True)
+class Node:
+    package: str
+    executable: str
+    parameters: SaferDict[str, Any] = field(default_factory=SaferDict)
+    args: List[str] = field(default_factory=list)
+    output: str = 'screen'
+    emulate_tty: bool = True
+    xterm: bool = False
+    gdb: bool = False
+    respawn: bool = False
+    respawn_delay: float = 0.0
+
+    publishers: Dict[str, PublisherInfo] = field(default_factory=dict)
+    subscribers: Dict[str, SubscriberInfo] = field(default_factory=dict)
+    service_clients: Dict[str, ServiceClientInfo] = field(default_factory=dict)
+    services: Dict[str, ServiceInfo] = field(default_factory=dict)
+    timers: List[TimerInfo] = field(default_factory=list)
+
+    def get_remappings(self):
+        remappings: dict[str, str] = {}
+        for name, node in chain(self.publishers.items(), self.subscribers.items(), self.service_clients.items(), self.services.items()):
+            remappings[name] = node.topic
+        return remappings
+
+
+@dataclass(slots=True)
+class SubLaunchROS:
+    package: str
+    launchfile: str
+    args: SaferDict[str, Any] = field(default_factory=SaferDict)
+
+
+@dataclass
+class LaunchGroup:
+    modules: SaferDict[str, 'Executable | Node | SubLaunchROS | LaunchGroup'] = field(
+        default_factory=SaferDict)
+
+
+LeafLaunch = Executable | Node | SubLaunchROS
+AnyLaunch = LeafLaunch | LaunchGroup
+
+
 class LaunchConfig:
-    def __init__(self, config: LaunchConfig | None = None, path: Optional[List[str]] = None, data: Optional[LaunchGroup] = None):
+    def __init__(self, config: LaunchConfig | None = None, path: Optional[List[str]] = None, data: Optional[LaunchGroup] = None, val: Optional[LeafLaunch] = None):
         self._config = config if config is not None else self
         self._path = path if path is not None else []
         self._data = data if data is not None else LaunchGroup()
-        self._val: Optional[LeafLaunch] = None
+        self._val: Optional[LeafLaunch] = val
         # key -> [Value, Usage count]
         self._overrides: Dict[str, Tuple[Any, int]] = {}
         self._param_overrides: Dict[str, Tuple[Any, int]] = {}
@@ -56,6 +189,10 @@ class LaunchConfig:
 
     def resolve_topic(self, topic: str):
         assert self._getval() is None
+        # do not add namespaces to absolute topics
+        if topic.startswith('/'):
+            return topic
+        # add namespaces for relative topics
         return '/' + '/'.join(self._getpath() + [topic])
 
     def resolve_namespace(self):
@@ -85,50 +222,27 @@ class LaunchConfig:
 
     def add_sublaunch_ros(self, name: str, package: str, launchfile: str, args: Dict[str, Any] = {}):
         assert self._getval() is None
-        self.add(name, SubLaunchROS(package,
-                 launchfile, args=SaferDict(**args)))
+        sublaunch = SubLaunchROS(package, launchfile, args=SaferDict(**args))
+        self.add(name, sublaunch)
+        return sublaunch
 
-    # def _fix_kwargs(self, name: str, kwargs: Any):
-    #     for k, v in kwargs.items():
-    #         if isinstance(v, dict):
-    #             v = SaferDict(**v)
-    #             if k == 'parameters':
-    #                 self._insert_param_overrides(name, v)
-    #             kwargs[k] = v
-    #         elif isinstance(v, list):
-    #             kwargs[k] = v[:]
-
-    # P1 = ParamSpec('P1')
-    # def add_node(self, name: str,
-    #              _constructor: Callable[Concatenate[P1], Node] = Node,
-    #              *args: P1.args,
-    #              **kwargs: P1.kwargs
-    #              ):
-    #     assert self._getval() is None
-    #     self._fix_kwargs(name, kwargs)
-    #     self.add(name, _constructor(*args, **kwargs))
-
-    # def add_executable(self, name: str,
-    #              _constructor: Callable[Concatenate[P1], Executable] = Executable,
-    #              *args: P1.args,
-    #              **kwargs: P1.kwargs
-    #              ):
-    #     assert self._getval() is None
-    #     self._fix_kwargs(name, kwargs)
-    #     self.add(name, _constructor(*args, **kwargs))
-
-    def add_node(self, name: str, package: str, executable: str, remappings: Dict[str, Topic] = {},
-                 parameters: Dict[str, Any] = {}, args: List[str] = [], output: str = 'screen', emulate_tty: bool = True):
+    def add_node(self, name: str, package: str, executable: str,
+                 parameters: Dict[str, Any] = {}, args: List[str] = [], output: str = 'screen', emulate_tty: bool = True, respawn: bool = False, respawn_delay: float = 0.0):
         assert self._getval() is None
         params = SaferDict(**parameters)
         self._insert_param_overrides(name, params)
-        self.add(name, Node(package, executable, remappings=SaferDict(**remappings),
-                            parameters=params, args=args[:], output=output, emulate_tty=emulate_tty))
+        node = Node(package, executable, parameters=params,
+                    args=args[:], output=output, emulate_tty=emulate_tty, respawn=respawn, respawn_delay=respawn_delay)
+        self.add(name, node)
+        return node
 
-    def add_executable(self, name: str, executable: str, args: List[str] = [], output: str = 'screen', emulate_tty: bool = True):
+    def add_executable(self, name: str, executable: str, args: List[str] = [], output: str = 'screen', emulate_tty: bool
+                       = True, respawn: bool = False, respawn_delay: float = 0.0):
         assert self._getval() is None
-        self.add(name, Executable(
-            executable, args=args[:], output=output, emulate_tty=emulate_tty))
+        node = Executable(executable, args=args[:], output=output,
+                          emulate_tty=emulate_tty, respawn=respawn, respawn_delay=respawn_delay)
+        self.add(name, node)
+        return node
 
     def recurse(self, cb_leaf: RecurseLeafFunc, cb_enter: Optional[RecurseEnterFunc] = None, cb_exit:
                 Optional[RecurseExitFunc] = None):
@@ -205,8 +319,7 @@ class LaunchConfig:
         val = self._getdata().modules[key]
         if isinstance(val, LaunchGroup):
             return self.group(key)
-        self._val = val
-        return self
+        return LaunchConfig(self, self._getpath(), self._getdata(), val)
 
     def get_leaf(self) -> LeafLaunch:
         val = self._getval()
@@ -310,6 +423,37 @@ class LaunchConfig:
         parser.add_argument('--params', type=str, nargs='+', default=[])
         args = parser.parse_args()
         self.parse_args(args.args, args.params)
+
+    P1 = ParamSpec('P1')
+
+    def add_publisher(self, node: Node, name: str, _constructor: Callable[Concatenate[P1], PublisherInfo] = PublisherInfo, *args: P1.args, **kwargs: P1.kwargs):
+        info = _constructor(*args, **kwargs)
+        info.topic = self.resolve_topic(info.topic)
+        node.publishers[name] = info
+        return info
+
+    def add_subscriber(self, node: Node, name: str, _constructor: Callable[Concatenate[P1], SubscriberInfo] = SubscriberInfo, *args: P1.args, **kwargs: P1.kwargs):
+        info = _constructor(*args, **kwargs)
+        info.topic = self.resolve_topic(info.topic)
+        node.subscribers[name] = info
+        return info
+
+    def add_service_client(self, node: Node, name: str, _constructor: Callable[Concatenate[P1], ServiceClientInfo] = ServiceClientInfo, *args: P1.args, **kwargs: P1.kwargs):
+        info = _constructor(*args, **kwargs)
+        info.topic = self.resolve_topic(info.topic)
+        node.service_clients[name] = info
+        return info
+
+    def add_service(self, node: Node, name: str, _constructor: Callable[Concatenate[P1], ServiceInfo] = ServiceInfo, *args: P1.args, **kwargs: P1.kwargs):
+        info = _constructor(*args, **kwargs)
+        info.topic = self.resolve_topic(info.topic)
+        node.services[name] = info
+        return info
+
+    def add_timer(self, node: Node, _constructor: Callable[Concatenate[P1], TimerInfo] = TimerInfo, *args: P1.args, **kwargs: P1.kwargs):
+        info = _constructor(*args, **kwargs)
+        node.timers.append(info)
+        return info
 
 
 @lru_cache(maxsize=256, typed=True)
