@@ -1,15 +1,17 @@
 from aduulm_launch_lib_py import LaunchConfig
 from .converter_ros2 import convert_config_to_ros2_launch
 from launch import LaunchDescription
+from launch.actions.include_launch_description import LaunchDescriptionEntity
 
-from typing import Optional
+from typing import Optional, List
 
 import launch
 import sys
 
 
-def execute_config_with_ros2_launch(config: LaunchConfig, debug: bool = False, noninteractive: Optional[bool] = None):
-    launch_description = convert_config_to_ros2_launch(config)
+def execute_config_with_ros2_launch(config: LaunchConfig, debug: bool = False, noninteractive: Optional[bool] = None, extra_modules: List[LaunchDescriptionEntity] = []):
+    launch_description = convert_config_to_ros2_launch(
+        config, extra_modules=extra_modules)
 
     return run_launchdescription(launch_description, debug=debug, noninteractive=noninteractive)
 

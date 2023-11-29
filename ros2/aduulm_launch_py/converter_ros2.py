@@ -2,16 +2,15 @@ from aduulm_launch_lib_py import LaunchConfig, LaunchGroup, AnyLaunch, SubLaunch
 from typing import Any, List, Optional
 
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, GroupAction, DeclareLaunchArgument, ExecuteProcess
+from launch.actions import IncludeLaunchDescription, GroupAction, ExecuteProcess
+from launch.actions.include_launch_description import LaunchDescriptionEntity
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import PushRosNamespace, Node as ROSNode
-from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration
 from aduulm_tools_python.launch_utils import get_package_share_directory
 import os
 
 
-def convert_config_to_ros2_launch(config: LaunchConfig):
+def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[LaunchDescriptionEntity] = []):
     modules = []
 
     def recurse(config: LaunchConfig, mod: AnyLaunch, name: Optional[str], modules: List[Any]):
@@ -81,6 +80,8 @@ def convert_config_to_ros2_launch(config: LaunchConfig):
             assert False
 
     modules = []
+    modules += extra_modules
+
     recurse(config, config._getdata(), None, modules)
     desc = LaunchDescription(modules)
     return desc

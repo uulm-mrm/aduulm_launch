@@ -110,6 +110,7 @@ class Node:
     gdb: bool = False
     respawn: bool = False
     respawn_delay: float = 0.0
+    orchestrator_priority: int = 0
 
     publishers: Dict[str, PublisherInfo] = field(default_factory=dict)
     subscribers: Dict[str, SubscriberInfo] = field(default_factory=dict)
@@ -192,12 +193,14 @@ class LaunchConfig:
         # do not add namespaces to absolute topics
         if topic.startswith('/'):
             return topic
-        # add namespaces for relative topics
-        return '/' + '/'.join(self._getpath() + [topic])
+        return f'{self.resolve_namespace()}/{topic}'
 
     def resolve_namespace(self):
         assert self._getval() is None
-        return '/' + '/'.join(self._getpath())
+        path = self._getpath()
+        if len(path) == 0:
+            return ''
+        return '/' + '/'.join(path)
 
     def group(self, group_name: str):
         assert self._getval() is None

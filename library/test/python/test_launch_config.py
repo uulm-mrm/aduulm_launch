@@ -57,7 +57,7 @@ class LaunchConfigTest(unittest.TestCase):
                 topic3 = config.resolve_topic('detections')
         self.assertEqual(topic2, '/test/detections')
         self.assertEqual(topic3, '/test/test2/detections')
-        self.assertEqual(ns1, '/')
+        self.assertEqual(ns1, '')
         self.assertEqual(ns2, '/test')
         self.assertEqual(ns3, '/test/test2')
 
