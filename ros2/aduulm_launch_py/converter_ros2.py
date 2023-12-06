@@ -1,13 +1,29 @@
-from aduulm_launch_lib_py import LaunchConfig, LaunchGroup, AnyLaunch, SubLaunchROS, Executable, Node
-from typing import Any, List, Optional
+from aduulm_launch_lib_py import LaunchConfig, LaunchGroup, AnyLaunch, SubLaunchROS, Executable, Node, LogLevel
+from typing import Any, List, Optional, cast
 
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, GroupAction, ExecuteProcess
+from launch.actions import IncludeLaunchDescription, GroupAction, ExecuteProcess, Shutdown, RegisterEventHandler
+from launch.event_handlers import OnProcessStart
+from launch.actions import EmitEvent
 from launch.actions.include_launch_description import LaunchDescriptionEntity
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import PushRosNamespace, Node as ROSNode
+from launch_ros.event_handlers import OnStateTransition
+from launch_ros.events.lifecycle import ChangeState
+from launch_ros.actions import LifecycleNode
+from launch.events import matches_action
 from aduulm_tools_python.launch_utils import get_package_share_directory
+from lifecycle_msgs.msg import Transition
 import os
+
+
+log_level_map = {
+    LogLevel.Debug: "debug",
+    LogLevel.Info: "info",
+    LogLevel.Warning: "warn",
+    LogLevel.Error: "error",
+    LogLevel.Fatal: "none",
+}
 
 
 def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[LaunchDescriptionEntity] = []):
@@ -67,15 +83,56 @@ def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[Laun
             )
             modules.append(desc)
         elif isinstance(mod, Node):
-            desc = ROSNode(
+            args = mod.args[:]
+            if len(mod.loggers) > 0:
+                args.append('--ros-args')
+                for logger in mod.loggers:
+                    args += ['--log-level',
+                             f'{logger.node_name}:={log_level_map[logger.log_level]}']
+            cls = ROSNode if not mod.handle_lifecycle else LifecycleNode
+            desc = cls(
                 package=mod.package,
                 executable=mod.executable,
                 parameters=[mod.parameters.toparamdict()],
                 remappings=mod.get_remappings().items(),
-                arguments=mod.args,
-                **handle_common(mod)
+                arguments=args,
+                **handle_common(mod),
+                on_exit=None if not mod.required else Shutdown(),
+                namespace=''
             )
             modules.append(desc)
+            if mod.handle_lifecycle:
+                handler_configure = RegisterEventHandler(
+                    event_handler=OnProcessStart(
+                        target_action=desc,
+                        on_start=[
+                            EmitEvent(
+                                event=ChangeState(
+                                    lifecycle_node_matcher=matches_action(
+                                        desc),
+                                    transition_id=Transition.TRANSITION_CONFIGURE,
+                                ),
+                            ),
+                        ],
+                    ),
+                )
+                handler_activate = RegisterEventHandler(
+                    event_handler=OnStateTransition(
+                        target_lifecycle_node=cast(LifecycleNode, desc),
+                        start_state='configuring',
+                        goal_state='inactive',
+                        entities=[
+                            EmitEvent(
+                                event=ChangeState(
+                                    lifecycle_node_matcher=matches_action(
+                                        desc),
+                                    transition_id=Transition.TRANSITION_ACTIVATE,
+                                ),
+                            ),
+                        ],
+                    ),
+                )
+                modules += [handler_configure, handler_activate]
         else:
             assert False
 

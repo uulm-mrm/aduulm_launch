@@ -5,11 +5,13 @@ from functools import lru_cache
 import re
 import yaml
 import argparse
+import warnings
+from enum import IntEnum
+from pathlib import Path, PurePath
 
 
 from dataclasses import dataclass, field
-from typing import Any, List
-from typing import TypeVar, Generic, Callable, Dict, ParamSpec, Concatenate
+from typing import Any, List, Literal, TypeVar, Generic, Callable, Dict, ParamSpec, Concatenate
 from itertools import chain
 
 Topic = str
@@ -40,16 +42,32 @@ class SaferDict(Generic[K, V], dict[K, V]):
         return value
 
     def toparamdict(self):
-        def fix(val):
+        def fix(key, val):
+            if isinstance(val, LogLevel):
+                return int(val)
             if isinstance(val, bool) or isinstance(val, float) or isinstance(val, int):
                 return val
             if isinstance(val, list) or isinstance(val, tuple):
-                return [fix(v) for v in val]
+                res = [fix(None, v) for v in val]
+                if len(res) == 0:
+                    print("Self:", self)
+                    print("Offending entry:", key, val)
+                    raise LaunchConfigException(
+                        'Received an empty list/tuple as a parameter value. ROS will probably throw an error here. Maybe pass a non-empty list with a dummy element (empty string) and handle this special case in the Node.')
+                return res
             return str(val)
-        return {k: fix(v) for k, v in self.items()}
+        return {k: fix(k, v) for k, v in self.items()}
 
     def tostrdict(self):
         return {k: str(v) for k, v in self.items()}
+
+
+class LogLevel(IntEnum):
+    Fatal = 0
+    Error = 1
+    Warning = 2
+    Info = 3
+    Debug = 4
 
 
 @dataclass(slots=True)
@@ -62,6 +80,7 @@ class Executable:
     gdb: bool = False
     respawn: bool = False
     respawn_delay: float = 0.0
+    required: bool = False
 
 
 @dataclass(slots=True)
@@ -99,24 +118,45 @@ class TimerInfo:
 
 
 @dataclass(slots=True)
+class ROSLoggerInfo:
+    node_name: str
+    log_level: LogLevel
+
+
+Logger = ROSLoggerInfo
+OutputType = Literal['screen'] | Literal['both'] | Literal['log']
+
+
+@dataclass(slots=True)
+class TritonModel:
+    model_path: Path
+    # relative paths will be interpreted relative to model_path
+    config_path: PurePath = PurePath('config.pbtxt')
+
+
+@dataclass(slots=True)
 class Node:
     package: str
     executable: str
     parameters: SaferDict[str, Any] = field(default_factory=SaferDict)
     args: List[str] = field(default_factory=list)
-    output: str = 'screen'
+    output: OutputType = 'screen'
     emulate_tty: bool = True
     xterm: bool = False
     gdb: bool = False
     respawn: bool = False
     respawn_delay: float = 0.0
-    orchestrator_priority: int = 0
+    required: bool = False
+    handle_lifecycle: bool = False
+    metadata: SaferDict[str, Any] = field(default_factory=SaferDict)
+    triton_models: List[TritonModel] = field(default_factory=list)
 
     publishers: Dict[str, PublisherInfo] = field(default_factory=dict)
     subscribers: Dict[str, SubscriberInfo] = field(default_factory=dict)
     service_clients: Dict[str, ServiceClientInfo] = field(default_factory=dict)
     services: Dict[str, ServiceInfo] = field(default_factory=dict)
     timers: List[TimerInfo] = field(default_factory=list)
+    loggers: List[Logger] = field(default_factory=list)
 
     def get_remappings(self):
         remappings: dict[str, str] = {}
@@ -230,20 +270,24 @@ class LaunchConfig:
         return sublaunch
 
     def add_node(self, name: str, package: str, executable: str,
-                 parameters: Dict[str, Any] = {}, args: List[str] = [], output: str = 'screen', emulate_tty: bool = True, respawn: bool = False, respawn_delay: float = 0.0):
+                 parameters: Dict[str, Any] = {}, args: List[str] = [], output: OutputType = 'screen', emulate_tty: bool
+                 = True, respawn: bool = False, respawn_delay: float = 0.0, required: bool = False, handle_lifecycle:
+                 bool = False, metadata: dict[str, Any] = {}):
         assert self._getval() is None
         params = SaferDict(**parameters)
+        metadata = SaferDict(**metadata)
         self._insert_param_overrides(name, params)
         node = Node(package, executable, parameters=params,
-                    args=args[:], output=output, emulate_tty=emulate_tty, respawn=respawn, respawn_delay=respawn_delay)
+                    args=args[:], output=output, emulate_tty=emulate_tty, respawn=respawn, respawn_delay=respawn_delay,
+                    required=required, handle_lifecycle=handle_lifecycle, metadata=metadata)
         self.add(name, node)
         return node
 
-    def add_executable(self, name: str, executable: str, args: List[str] = [], output: str = 'screen', emulate_tty: bool
-                       = True, respawn: bool = False, respawn_delay: float = 0.0):
+    def add_executable(self, name: str, executable: str, args: List[str] = [], output: OutputType = 'screen', emulate_tty: bool
+                       = True, respawn: bool = False, respawn_delay: float = 0.0, required: bool = False):
         assert self._getval() is None
         node = Executable(executable, args=args[:], output=output,
-                          emulate_tty=emulate_tty, respawn=respawn, respawn_delay=respawn_delay)
+                          emulate_tty=emulate_tty, respawn=respawn, respawn_delay=respawn_delay, required=required)
         self.add(name, node)
         return node
 
@@ -456,6 +500,11 @@ class LaunchConfig:
     def add_timer(self, node: Node, _constructor: Callable[Concatenate[P1], TimerInfo] = TimerInfo, *args: P1.args, **kwargs: P1.kwargs):
         info = _constructor(*args, **kwargs)
         node.timers.append(info)
+        return info
+
+    def add_ros_logger(self, node: Node, node_name: str, log_level: LogLevel):
+        info = ROSLoggerInfo(node_name=node_name, log_level=log_level)
+        node.loggers.append(info)
         return info
 
 

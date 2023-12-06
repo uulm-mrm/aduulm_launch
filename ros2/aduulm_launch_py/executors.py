@@ -8,7 +8,7 @@ from launch.actions.include_launch_description import LaunchDescriptionEntity
 P = ParamSpec('P')
 
 
-def execute(gen_config: Callable[Concatenate[LaunchConfig, P], None], _exit=True, _extra_ros2_modules: List[LaunchDescriptionEntity] = [], *args: P.args, **kwargs: P.kwargs):
+def execute(gen_config: Callable[Concatenate[LaunchConfig, P], None], _exit=True, _debug=False, _extra_ros2_modules: List[LaunchDescriptionEntity] = [], *args: P.args, **kwargs: P.kwargs):
     config = LaunchConfig()
     config.parse_argv()
 
@@ -16,7 +16,7 @@ def execute(gen_config: Callable[Concatenate[LaunchConfig, P], None], _exit=True
     config.check_overrides_counts()
 
     ret = execute_config_with_ros2_launch(
-        config, extra_modules=_extra_ros2_modules)
+        config, debug=_debug, extra_modules=_extra_ros2_modules)
     if _exit:
         sys.exit(ret)
     return ret
