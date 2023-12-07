@@ -433,6 +433,8 @@ class LaunchConfig:
             else:
                 assert not isinstance(field.default_factory, _MISSING_TYPE)
                 default = field.default_factory()
+            if isinstance(v, str) and field.type in [Path, PurePath]:
+                v = field.type(v)
             if not isinstance(v, field.type):
                 raise LaunchConfigException(
                     f'Attribute {field.name} of {params.__class__} was overridden by override {k} with value {v} but type should be {field.type}!')
