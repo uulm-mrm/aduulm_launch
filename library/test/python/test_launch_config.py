@@ -105,7 +105,7 @@ class LaunchConfigTest(unittest.TestCase):
             config.overrides().test.test2.launch_test_node = True
         self.assertRaises(LaunchConfigException, func)
         self.assertEqual(config._getoverrides()[
-                         'test.test2.launch_test_node'], (True, 0))
+                         'test.test2.launch_test_node'], (True, 0, []))
 
     def test_get_overrides_toplevel(self):
         params = _TestParameters(required_arg='val', optional_arg1='other_val')

@@ -1,12 +1,10 @@
 from __future__ import annotations
-from typing import Dict, Any, Tuple, List, Callable, Generator, Optional, Concatenate, ParamSpec, cast, Literal, TypeVar, Generic, Union, get_type_hints, get_args, get_origin
+from typing import Dict, Any, Tuple, List, Callable, Generator, Optional, Concatenate, ParamSpec, cast, Literal, TypeVar, Generic, Union, get_args, get_origin
 from types import UnionType
-from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass
+from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass, Field
 from functools import lru_cache
 import re
 import yaml
-import argparse
-import warnings
 from enum import IntEnum
 from pathlib import Path, PurePath
 from itertools import chain
@@ -184,8 +182,8 @@ class LaunchConfig:
         self._data = data if data is not None else LaunchGroup()
         self._val: Optional[LeafLaunch] = val
         # key -> [Value, Usage count]
-        self._overrides: Dict[str, Tuple[Any, int]] = {}
-        self._param_overrides: Dict[str, Tuple[Any, int]] = {}
+        self._overrides: Dict[str, Tuple[Any, int, List[Any]]] = {}
+        self._param_overrides: Dict[str, Tuple[Any, int, List[Any]]] = {}
 
     def _getconfig(self) -> LaunchConfig:
         return object.__getattribute__(self, '_config')
@@ -205,10 +203,10 @@ class LaunchConfig:
     def _getold_path(self) -> List[str]:
         return object.__getattribute__(self, '_old_path')
 
-    def _getoverrides(self) -> Dict[str, Tuple[Any, int]]:
+    def _getoverrides(self) -> Dict[str, Tuple[Any, int, List[Any]]]:
         return object.__getattribute__(self, '_overrides')
 
-    def _getparam_overrides(self) -> Dict[str, Tuple[Any, int]]:
+    def _getparam_overrides(self) -> Dict[str, Tuple[Any, int, List[Any]]]:
         return object.__getattribute__(self, '_param_overrides')
 
     def __enter__(self):
@@ -406,14 +404,15 @@ class LaunchConfig:
         split_overrides = [(k, *split_pattern(k), v)
                            for k, v in overrides.items()]
         key = '.'.join(self._getpath() + [node_name])
-        for orig_k, k, param_name, (v, usage_cnt) in split_overrides:
+        for orig_k, k, param_name, (v, usage_cnt, lst) in split_overrides:
             if not matches(key, k):
                 continue
             args.add(param_name, v)
-            overrides[orig_k] = (v, usage_cnt+1)
+            overrides[orig_k] = (v, usage_cnt+1, lst)
 
-    def insert_overrides(self, params: Any):
-        assert is_dataclass(params)
+    # get overrides at current path for dataclass
+    def get_overrides(self, params_t: type):
+        assert is_dataclass(params_t)
         overrides = self._getoverrides()
 
         # https://stackoverflow.com/questions/74544539/python-how-to-check-what-types-are-in-defined-types-uniontype
@@ -422,21 +421,17 @@ class LaunchConfig:
             return origin is Union or origin is UnionType
 
         def accepts_type(t: type, test_t: type):
-            return test_t is t or (is_union(t) and len([issubclass(test_t, t_) for t_ in get_args(t)]) > 0)
+            return issubclass(test_t, t) or (is_union(t) and len([issubclass(test_t, t_) for t_ in get_args(t)]) > 0)
 
-        for field in fields(params):
+        res: List[Tuple[str, Field[Any], Any, List[Any]]] = []
+        for field in fields(params_t):
             key = '.'.join(self._getpath() + [field.name])
             m = [(k, v) for k, v in overrides.items() if matches(key, k)]
             if len(m) == 0:
                 continue
             # should not have been inserted if multiple patterns match
             assert len(m) == 1
-            k, (v, usage_cnt) = m[0]
-            if not isinstance(field.default, _MISSING_TYPE):
-                default = field.default
-            else:
-                assert not isinstance(field.default_factory, _MISSING_TYPE)
-                default = field.default_factory()
+            k, (v, _, lst) = m[0]
             # Path is derived from Purepath, so check for Path first
             if isinstance(v, str) and accepts_type(field.type, Path):
                 v = Path(v)
@@ -444,41 +439,54 @@ class LaunchConfig:
                 v = PurePath(v)
             if not accepts_type(field.type, type(v)):
                 raise LaunchConfigException(
-                    f'Attribute {field.name} of {params.__class__} was overridden by override {k} with value {v} of type {type(v)} but type should be {field.type}!')
-            if getattr(params, field.name) != default:
+                    f'Attribute {field.name} of {params_t} was overridden by override {k} with value {v} of type {type(v)} but type should be {field.type}!')
+            res.append((k, field, v, lst))
+        return res
+
+    def inc_override_count(self, k: str, params: Any):
+        overrides = self._getoverrides()
+        old_v, usage_cnt, lst = overrides[k]
+        if params not in lst:
+            lst.append(params)
+        overrides[k] = (old_v, usage_cnt+1, lst)
+
+    def insert_overrides(self, params: Any):
+        assert is_dataclass(params)
+        for k, field, v, lst in self.get_overrides(type(params)):
+            if not isinstance(field.default, _MISSING_TYPE):
+                default = field.default
+            else:
+                if isinstance(field.default_factory, _MISSING_TYPE):
+                    # if the argument is mandatory, there can be no override for this argument (at this point)
+                    continue
+                default = field.default_factory()
+            if getattr(params, field.name) != default and params not in lst:
                 raise LaunchConfigException(
                     f'Attribute {field.name} of {params.__class__} was already assigned to and can not be overridden by override {k}!')
             setattr(params, field.name, v)
-            overrides[k] = (v, usage_cnt+1)
+            self.inc_override_count(k, params)
 
     def check_overrides_counts(self):
         self._check_overrides_counts(self._getoverrides(), 'argument')
         self._check_overrides_counts(self._getparam_overrides(), 'parameter')
 
-    def _check_overrides_counts(self, overrides: Dict[str, Tuple[Any, int]], _type: str):
-        unused_overrides = [k for k, (_, e) in overrides.items() if e == 0]
+    def _check_overrides_counts(self, overrides: Dict[str, Tuple[Any, int, List[Any]]], _type: str):
+        unused_overrides = [k for k, (_, e, _) in overrides.items() if e == 0]
         if len(unused_overrides) != 0:
             raise LaunchConfigException(
                 f'The following {_type} overrides were specified but were not applied. Maybe a typo or someone forgot to call insert_overrides()? {unused_overrides}')
 
     def parse_args(self, args: List[str], params: List[str]):
-        def parse(lst: List[str], overrides: Dict[str, Tuple[Any, int]]):
+        def parse(lst: List[str], overrides: Dict[str, Tuple[Any, int, List[Any]]]):
             for arg in lst:
                 assert ':=' in arg
                 key, val = arg.split(':=')
                 check_override_valid(key, overrides)
                 val = yaml.load(val, Loader=yaml.SafeLoader)
-                overrides[key] = (val, 0)
+                overrides[key] = (val, 0, [])
 
         parse(args, self._getoverrides())
         parse(params, self._getparam_overrides())
-
-    def parse_argv(self):
-        parser = argparse.ArgumentParser()
-        parser.add_argument('args', type=str, nargs='*', default=[])
-        parser.add_argument('--params', type=str, nargs='+', default=[])
-        args = parser.parse_args()
-        self.parse_args(args.args, args.params)
 
     P1 = ParamSpec('P1')
 
@@ -534,7 +542,7 @@ def matches(key: str, pattern: str):
     return fnmatch(key, pattern)
 
 
-def check_override_valid(key: str, overrides: Dict[str, Tuple[Any, int]]):
+def check_override_valid(key: str, overrides: Dict[str, Tuple[Any, int, List[Any]]]):
     if key in overrides:
         raise LaunchConfigException(f'Override for "{key}" already exists!')
     if len([pattern for pattern, _ in overrides.items() if matches(key, pattern)]) > 0:
@@ -546,7 +554,7 @@ def check_override_valid(key: str, overrides: Dict[str, Tuple[Any, int]]):
 
 
 class OverrideSetter:
-    def __init__(self, overrides: Dict[str, Tuple[Any, int]], path: List[str]):
+    def __init__(self, overrides: Dict[str, Tuple[Any, int, List[Any]]], path: List[str]):
         object.__setattr__(self, '_overrides', overrides)
         object.__setattr__(self, '_path', path)
 
@@ -554,7 +562,7 @@ class OverrideSetter:
         key = '.'.join(self._getpath() + [key])
         overrides = self._getoverrides()
         check_override_valid(key, overrides)
-        self._getoverrides()[key] = (value, 0)
+        self._getoverrides()[key] = (value, 0, [])
 
     def __getattr__(self, key: str):
         return OverrideSetter(self._getoverrides(), self._getpath() + [key])
@@ -562,7 +570,7 @@ class OverrideSetter:
     def _getpath(self) -> List[str]:
         return object.__getattribute__(self, '_path')
 
-    def _getoverrides(self) -> Dict[str, Tuple[Any, int]]:
+    def _getoverrides(self) -> Dict[str, Tuple[Any, int, List[Any]]]:
         return object.__getattribute__(self, '_overrides')
 
 
