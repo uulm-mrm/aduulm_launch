@@ -1,7 +1,7 @@
-from aduulm_launch_lib_py import LaunchConfig
+from aduulm_launch_lib_py import LaunchConfig, LaunchConfigException
 from .executor_ros2 import execute_config_with_ros2_launch
 import sys
-from typing import Callable, ParamSpec, Concatenate, List, Optional, TypeVar, cast, Any
+from typing import Callable, ParamSpec, Concatenate, List, TypeVar, cast
 from launch.actions.include_launch_description import LaunchDescriptionEntity
 from dataclasses import is_dataclass
 import argparse
@@ -17,7 +17,11 @@ def execute_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P], N
     sys_args = _parse_args(config)
     assert is_dataclass(params_cls) and isinstance(params_cls, type)
     overrides = config.get_overrides(params_cls)
-    params = params_cls(**{k: v for k, _, v, _ in overrides})
+    try:
+        params = params_cls(**{k: v for k, _, v, _ in overrides})
+    except TypeError as e:
+        raise LaunchConfigException(
+            f'Could not construct instance of dataclass type {params_cls}! Probably the class has required fields but no override was provided!') from e
     for k, _, _, _ in overrides:
         config.inc_override_count(k, params)
     gen_config(config, cast(PT, params), *args, **kwargs)
