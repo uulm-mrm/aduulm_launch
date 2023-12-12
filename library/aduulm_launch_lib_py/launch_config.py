@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Dict, Any, Tuple, List, Callable, Generator, Optional, Concatenate, ParamSpec, cast
-from dataclasses import fields, _MISSING_TYPE, is_dataclass
+from typing import Dict, Any, Tuple, List, Callable, Generator, Optional, Concatenate, ParamSpec, cast, Literal, TypeVar, Generic, Union, get_type_hints, get_args, get_origin
+from types import UnionType
+from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass
 from functools import lru_cache
 import re
 import yaml
@@ -8,13 +9,7 @@ import argparse
 import warnings
 from enum import IntEnum
 from pathlib import Path, PurePath
-
-
-from dataclasses import dataclass, field
-from typing import Any, List, Literal, TypeVar, Generic, Callable, Dict, ParamSpec, Concatenate
 from itertools import chain
-
-Topic = str
 
 
 K = TypeVar('K')
@@ -420,6 +415,15 @@ class LaunchConfig:
     def insert_overrides(self, params: Any):
         assert is_dataclass(params)
         overrides = self._getoverrides()
+
+        # https://stackoverflow.com/questions/74544539/python-how-to-check-what-types-are-in-defined-types-uniontype
+        def is_union(t: object) -> bool:
+            origin = get_origin(t)
+            return origin is Union or origin is UnionType
+
+        def accepts_type(t: type, test_t: type):
+            return test_t is t or (is_union(t) and len([issubclass(test_t, t_) for t_ in get_args(t)]) > 0)
+
         for field in fields(params):
             key = '.'.join(self._getpath() + [field.name])
             m = [(k, v) for k, v in overrides.items() if matches(key, k)]
@@ -433,11 +437,14 @@ class LaunchConfig:
             else:
                 assert not isinstance(field.default_factory, _MISSING_TYPE)
                 default = field.default_factory()
-            if isinstance(v, str) and field.type in [Path, PurePath]:
-                v = field.type(v)
-            if not isinstance(v, field.type):
+            # Path is derived from Purepath, so check for Path first
+            if isinstance(v, str) and accepts_type(field.type, Path):
+                v = Path(v)
+            elif isinstance(v, str) and accepts_type(field.type, PurePath):
+                v = PurePath(v)
+            if not accepts_type(field.type, type(v)):
                 raise LaunchConfigException(
-                    f'Attribute {field.name} of {params.__class__} was overridden by override {k} with value {v} but type should be {field.type}!')
+                    f'Attribute {field.name} of {params.__class__} was overridden by override {k} with value {v} of type {type(v)} but type should be {field.type}!')
             if getattr(params, field.name) != default:
                 raise LaunchConfigException(
                     f'Attribute {field.name} of {params.__class__} was already assigned to and can not be overridden by override {k}!')
