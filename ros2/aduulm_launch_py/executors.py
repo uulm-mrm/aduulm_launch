@@ -3,18 +3,23 @@ from .executor_ros2 import execute_config_with_ros2_launch
 import sys
 from typing import Callable, ParamSpec, Concatenate, List, TypeVar, cast
 from launch.actions.include_launch_description import LaunchDescriptionEntity
-from dataclasses import is_dataclass
+from dataclasses import dataclass, is_dataclass
 import argparse
+from inspect import signature
 
 
 P = ParamSpec('P')
 PT = TypeVar('PT')
 
 
-def execute_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P], None],
-                        params_cls: Callable[..., PT], _exit=True, _extra_ros2_modules: List[LaunchDescriptionEntity] = [], *args: P.args, **kwargs: P.kwargs):
+def call_config_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P], None], *args: P.args, **kwargs: P.kwargs):
     config = LaunchConfig()
+    dataclass_params = [(i, name, param.annotation) for i, (name, param) in enumerate(
+        signature(gen_config).parameters.items()) if is_dataclass(param.annotation)]
+    assert len(dataclass_params) == 1
     sys_args = _parse_args(config)
+    arg_pos, name, params_cls = dataclass_params[0]
+    assert arg_pos == 1
     assert is_dataclass(params_cls) and isinstance(params_cls, type)
     overrides = config.get_overrides(params_cls)
     try:
@@ -24,7 +29,16 @@ def execute_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P], N
             f'Could not construct instance of dataclass type {params_cls}! Probably the class has required fields but no override was provided!') from e
     for k, _, _, _ in overrides:
         config.inc_override_count(k, params)
-    gen_config(config, cast(PT, params), *args, **kwargs)
+    assert name not in kwargs
+    gen_config(config, params, *args, **kwargs)
+    config.check_overrides_counts()
+    return config, sys_args
+
+
+def execute_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P], None],
+                        _exit=True, _extra_ros2_modules: List[LaunchDescriptionEntity] = [], *args: P.args, **kwargs: P.kwargs):
+
+    config, sys_args = call_config_with_params(gen_config, *args, **kwargs)
     return _execute(config, _debug=sys_args.debug, _exit=_exit, _extra_ros2_modules=_extra_ros2_modules)
 
 
@@ -47,7 +61,6 @@ def _parse_args(config: LaunchConfig):
 
 
 def _execute(config: LaunchConfig, _debug: bool = False, _exit=True, _extra_ros2_modules: List[LaunchDescriptionEntity] = []):
-    config.check_overrides_counts()
     ret = execute_config_with_ros2_launch(
         config, debug=_debug, extra_modules=_extra_ros2_modules)
     if _exit:
