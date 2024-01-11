@@ -1,3 +1,4 @@
+from launch.actions import RegisterEventHandler, EmitEvent
 from aduulm_launch_lib_py import LaunchConfig, LaunchGroup, AnyLaunch, SubLaunchROS, Executable, Node, LogLevel
 from typing import Any, List, Optional, cast
 
@@ -24,6 +25,40 @@ log_level_map = {
     LogLevel.Error: "error",
     LogLevel.Fatal: "none",
 }
+
+
+def handle_activation(node_desc: LifecycleNode):
+    handler_configure = RegisterEventHandler(
+        event_handler=OnProcessStart(
+            target_action=node_desc,
+            on_start=[
+                EmitEvent(
+                    event=ChangeState(
+                        lifecycle_node_matcher=matches_action(
+                            node_desc),
+                        transition_id=Transition.TRANSITION_CONFIGURE,
+                    ),
+                ),
+            ],
+        ),
+    )
+    handler_activate = RegisterEventHandler(
+        event_handler=OnStateTransition(
+            target_lifecycle_node=node_desc,
+            start_state='configuring',
+            goal_state='inactive',
+            entities=[
+                EmitEvent(
+                    event=ChangeState(
+                        lifecycle_node_matcher=matches_action(
+                            node_desc),
+                        transition_id=Transition.TRANSITION_ACTIVATE,
+                    ),
+                ),
+            ],
+        ),
+    )
+    return [node_desc, handler_configure, handler_activate]
 
 
 def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[LaunchDescriptionEntity] = []):
