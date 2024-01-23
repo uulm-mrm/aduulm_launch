@@ -421,7 +421,12 @@ class LaunchConfig:
             return origin is Union or origin is UnionType
 
         def accepts_type(t: type, test_t: type):
-            return issubclass(test_t, t) or (is_union(t) and len([issubclass(test_t, t_) for t_ in get_args(t)]) > 0)
+            if is_union(t):
+                return len([accepts_type(t_, test_t) for t_ in get_args(t)]) > 0
+            origin = get_origin(t)
+            if origin is not None:
+                return issubclass(test_t, origin)
+            return issubclass(test_t, t)
 
         res: List[Tuple[str, Field[Any], Any, List[Any]]] = []
         for field in fields(params_t):
