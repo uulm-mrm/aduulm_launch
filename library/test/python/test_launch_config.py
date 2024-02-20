@@ -136,8 +136,10 @@ class LaunchConfigTest(unittest.TestCase):
     def test_throw_overrides_twice(self):
         params = _TestParameters(
             required_arg='val', optional_arg1='other_val', optional_arg2='other_val2')
-        self.assertRaises(LaunchConfigException,
-                          lambda: self._test_overrides(params))
+        self.assertEqual(params.required_arg, 'val')
+        self.assertEqual(params.optional_arg1, 'other_val')
+        self.assertEqual(params.optional_arg2, 'other_val2')
+        self._test_overrides(params)
 
     def test_throw_overrides_not_applied(self):
         params = _TestParameters2(arg2='val')
