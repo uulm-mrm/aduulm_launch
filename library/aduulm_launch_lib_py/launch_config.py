@@ -74,6 +74,7 @@ class Executable:
     emulate_tty: bool = True
     xterm: bool = False
     gdb: bool = False
+    valgrind: bool = False
     respawn: bool = False
     respawn_delay: float = 0.0
     required: bool = False
@@ -156,6 +157,7 @@ class Node:
     emulate_tty: bool = True
     xterm: bool = False
     gdb: bool = False
+    valgrind: bool = False
     respawn: bool = False
     respawn_delay: float = 0.0
     required: bool = False

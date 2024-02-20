@@ -92,7 +92,11 @@ def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[Laun
             if mod.xterm:
                 prefix += 'xterm -maximized -bg black -fg white -hold -sl 100000 -e '
             if mod.gdb:
-                prefix += 'gdb -ex run --args'
+                assert not mod.valgrind
+                prefix += 'gdb -ex run --args '
+            if mod.valgrind:
+                prefix += 'valgrind '
+            prefix = prefix.strip()
             return dict(
                 name=(name if mod.set_name else None),
                 output=mod.output,
