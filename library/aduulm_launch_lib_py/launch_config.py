@@ -40,6 +40,9 @@ class SaferDict(Generic[K, V], dict[K, V]):
                 return int(val)
             if isinstance(val, bool) or isinstance(val, float) or isinstance(val, int):
                 return val
+            if isinstance(val, dict):
+                return {fix(None, k): fix(fix(None, k), v)
+                        for k, v in val.items()}
             if isinstance(val, list) or isinstance(val, tuple):
                 res = [fix(None, v) for v in val]
                 if len(res) == 0:
@@ -74,6 +77,7 @@ class Executable:
     respawn: bool = False
     respawn_delay: float = 0.0
     required: bool = False
+    set_name: bool = True
 
 
 @dataclass(slots=True)
@@ -92,6 +96,21 @@ class SubscriberInfo:
     outputs: List[PublisherInfo] = field(default_factory=list)
     service_calls: List[ServiceClientInfo] = field(default_factory=list)
     changes_dataprovider_state: bool = False
+
+
+@dataclass(slots=True)
+class ApproximateTimeSyncInfo:
+    names: List[str]
+    topics: List[str]
+    slop: float
+    queue_size: int
+    outputs: List[PublisherInfo] = field(default_factory=list)
+    service_calls: List[ServiceClientInfo] = field(default_factory=list)
+    changes_dataprovider_state: bool = False
+
+    def __post_init__(self):
+        assert len(self.names) == len(self.topics)
+        assert len(self.names) >= 2
 
 
 @dataclass(slots=True)
@@ -143,9 +162,12 @@ class Node:
     handle_lifecycle: bool = False
     metadata: SaferDict[str, Any] = field(default_factory=SaferDict)
     triton_models: List[TritonModel] = field(default_factory=list)
+    set_name: bool = True
 
     publishers: Dict[str, PublisherInfo] = field(default_factory=dict)
     subscribers: Dict[str, SubscriberInfo] = field(default_factory=dict)
+    approx_time_sync_subscribers: List[ApproximateTimeSyncInfo] = field(
+        default_factory=list)
     service_clients: Dict[str, ServiceClientInfo] = field(default_factory=dict)
     services: Dict[str, ServiceInfo] = field(default_factory=dict)
     timers: List[TimerInfo] = field(default_factory=list)
@@ -155,6 +177,9 @@ class Node:
         remappings: dict[str, str] = {}
         for name, node in chain(self.publishers.items(), self.subscribers.items(), self.service_clients.items(), self.services.items()):
             remappings[name] = node.topic
+        for node in self.approx_time_sync_subscribers:
+            for name, topic in zip(node.names, node.topics):
+                remappings[name] = topic
         return remappings
 
 
@@ -265,22 +290,22 @@ class LaunchConfig:
     def add_node(self, name: str, package: str, executable: str,
                  parameters: Dict[str, Any] = {}, args: List[str] = [], output: OutputType = 'screen', emulate_tty: bool
                  = True, respawn: bool = False, respawn_delay: float = 0.0, required: bool = False, handle_lifecycle:
-                 bool = False, metadata: dict[str, Any] = {}):
+                 bool = False, set_name: bool = True, metadata: dict[str, Any] = {}):
         assert self._getval() is None
         params = SaferDict(**parameters)
         metadata = SaferDict(**metadata)
         self._insert_param_overrides(name, params)
         node = Node(package, executable, parameters=params,
                     args=args[:], output=output, emulate_tty=emulate_tty, respawn=respawn, respawn_delay=respawn_delay,
-                    required=required, handle_lifecycle=handle_lifecycle, metadata=metadata)
+                    required=required, handle_lifecycle=handle_lifecycle, set_name=set_name, metadata=metadata)
         self.add(name, node)
         return node
 
     def add_executable(self, name: str, executable: str, args: List[str] = [], output: OutputType = 'screen', emulate_tty: bool
-                       = True, respawn: bool = False, respawn_delay: float = 0.0, required: bool = False):
+                       = True, respawn: bool = False, respawn_delay: float = 0.0, set_name: bool = True, required: bool = False):
         assert self._getval() is None
         node = Executable(executable, args=args[:], output=output,
-                          emulate_tty=emulate_tty, respawn=respawn, respawn_delay=respawn_delay, required=required)
+                          emulate_tty=emulate_tty, respawn=respawn, respawn_delay=respawn_delay, set_name=set_name, required=required)
         self.add(name, node)
         return node
 
@@ -462,12 +487,13 @@ class LaunchConfig:
                 default = field.default
             else:
                 if isinstance(field.default_factory, _MISSING_TYPE):
-                    # if the argument is mandatory, there can be no override for this argument (at this point)
-                    continue
-                default = field.default_factory()
-            if getattr(params, field.name) != default and params not in lst:
-                raise LaunchConfigException(
-                    f'Attribute {field.name} of {params.__class__} was already assigned to and can not be overridden by override {k}!')
+                    default = None
+                else:
+                    default = field.default_factory()
+            val = getattr(params, field.name)
+            if val != default and val != v and params not in lst:
+                print(
+                    f'Warning: Attribute {field.name} of {params.__class__} was already assigned the value {val} and was now overriden by override {k} with value {v}')
             setattr(params, field.name, v)
             self.inc_override_count(k, params)
 
@@ -505,6 +531,12 @@ class LaunchConfig:
         info = _constructor(*args, **kwargs)
         info.topic = self.resolve_topic(info.topic)
         node.subscribers[name] = info
+        return info
+
+    def add_approx_time_sync_subscriber(self, node: Node, _constructor: Callable[Concatenate[P1], ApproximateTimeSyncInfo] = ApproximateTimeSyncInfo, *args: P1.args, **kwargs: P1.kwargs):
+        info = _constructor(*args, **kwargs)
+        info.topics = [self.resolve_topic(topic) for topic in info.topics]
+        node.approx_time_sync_subscribers.append(info)
         return info
 
     def add_service_client(self, node: Node, name: str, _constructor: Callable[Concatenate[P1], ServiceClientInfo] = ServiceClientInfo, *args: P1.args, **kwargs: P1.kwargs):

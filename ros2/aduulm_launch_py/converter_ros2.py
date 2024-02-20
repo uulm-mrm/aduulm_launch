@@ -94,7 +94,7 @@ def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[Laun
             if mod.gdb:
                 prefix += 'gdb -ex run --args'
             return dict(
-                name=name,
+                name=(name if mod.set_name else None),
                 output=mod.output,
                 emulate_tty=mod.emulate_tty,
                 prefix=prefix,
