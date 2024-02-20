@@ -1,7 +1,9 @@
 import unittest
 from typing import List, Dict
 from dataclasses import dataclass, field
-from aduulm_launch_lib_py.utils import dataclass_from_dict
+from unittest.mock import mock_open, patch
+from pathlib import Path
+from aduulm_launch_lib_py.utils import dataclass_from_dict, dataclass_from_yaml
 
 
 @dataclass
@@ -88,3 +90,12 @@ class UtilsTest(unittest.TestCase):
         struct = dataclass_from_dict(DummyStructWithDictOfStruct, data)
         self.assertEqual(struct, DummyStructWithDictOfStruct(
             test_dict={"a": DummyInnerStruct(a=1), "b": DummyInnerStruct(a=2)}))
+
+    def test_load_yaml(self):
+        fn = Path('test_file')
+        data = 'a: 2'
+        m = mock_open(read_data=data)
+        with patch('aduulm_launch_lib_py.utils.open', m):
+            res = dataclass_from_yaml(DummyInnerStruct, fn)
+        m.assert_called_once_with(fn, 'r')
+        self.assertEqual(res, DummyInnerStruct(a=2))
