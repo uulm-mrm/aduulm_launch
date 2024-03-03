@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Any, Tuple, List, Callable, Generator, Optional, Concatenate, ParamSpec, cast, Literal, TypeVar, Generic, Union, get_args, get_origin
+from typing import Dict, Any, Tuple, List, Callable, Generator, Optional, Concatenate, ParamSpec, cast, Literal, Optional, TypeVar, Generic, Union, get_args, get_origin
 from types import UnionType
 from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass, Field
 from functools import lru_cache
@@ -100,11 +100,11 @@ class SubscriberInfo:
 
 
 @dataclass(slots=True)
-class ApproximateTimeSyncInfo:
+class TimeSyncInfo:
     names: List[str]
     topics: List[str]
-    slop: float
     queue_size: int
+    slop: Optional[float] = None
     outputs: List[PublisherInfo] = field(default_factory=list)
     service_calls: List[ServiceClientInfo] = field(default_factory=list)
     changes_dataprovider_state: bool = False
@@ -168,8 +168,7 @@ class Node:
 
     publishers: Dict[str, PublisherInfo] = field(default_factory=dict)
     subscribers: Dict[str, SubscriberInfo] = field(default_factory=dict)
-    approx_time_sync_subscribers: List[ApproximateTimeSyncInfo] = field(
-        default_factory=list)
+    time_sync_subscribers: List[TimeSyncInfo] = field(default_factory=list)
     service_clients: Dict[str, ServiceClientInfo] = field(default_factory=dict)
     services: Dict[str, ServiceInfo] = field(default_factory=dict)
     timers: List[TimerInfo] = field(default_factory=list)
@@ -179,7 +178,7 @@ class Node:
         remappings: dict[str, str] = {}
         for name, node in chain(self.publishers.items(), self.subscribers.items(), self.service_clients.items(), self.services.items()):
             remappings[name] = node.topic
-        for node in self.approx_time_sync_subscribers:
+        for node in self.time_sync_subscribers:
             for name, topic in zip(node.names, node.topics):
                 remappings[name] = topic
         return remappings
@@ -535,10 +534,10 @@ class LaunchConfig:
         node.subscribers[name] = info
         return info
 
-    def add_approx_time_sync_subscriber(self, node: Node, _constructor: Callable[Concatenate[P1], ApproximateTimeSyncInfo] = ApproximateTimeSyncInfo, *args: P1.args, **kwargs: P1.kwargs):
+    def add_time_sync_subscriber(self, node: Node, _constructor: Callable[Concatenate[P1], TimeSyncInfo] = TimeSyncInfo, *args: P1.args, **kwargs: P1.kwargs):
         info = _constructor(*args, **kwargs)
         info.topics = [self.resolve_topic(topic) for topic in info.topics]
-        node.approx_time_sync_subscribers.append(info)
+        node.time_sync_subscribers.append(info)
         return info
 
     def add_service_client(self, node: Node, name: str, _constructor: Callable[Concatenate[P1], ServiceClientInfo] = ServiceClientInfo, *args: P1.args, **kwargs: P1.kwargs):
