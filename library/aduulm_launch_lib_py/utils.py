@@ -40,7 +40,6 @@ def dataclass_from_dict(params_cls: Callable[..., T1], config: Dict[str, Any], i
                 if field.name == key:
                     is_list, element_t_list = check_is_list(field.type)
                     is_dict, element_t_dict = check_is_dict(field.type)
-                    print(key, is_list, is_dict)
                     if is_dataclass(field.type):
                         field_dataclass = field.type
                     elif is_list:
