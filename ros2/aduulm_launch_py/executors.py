@@ -37,7 +37,6 @@ def call_config_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P
 
 def execute_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P], None],
                         _exit=True, _extra_ros2_modules: List[LaunchDescriptionEntity] = [], *args: P.args, **kwargs: P.kwargs):
-
     config, sys_args = call_config_with_params(gen_config, *args, **kwargs)
     return _execute(config, _debug=sys_args.debug, _exit=_exit, _extra_ros2_modules=_extra_ros2_modules)
 
