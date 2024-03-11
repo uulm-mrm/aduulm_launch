@@ -1,6 +1,6 @@
 from launch.actions import RegisterEventHandler, EmitEvent
 from aduulm_launch_lib_py import LaunchConfig, LaunchGroup, AnyLaunch, SubLaunchROS, Executable, Node, LogLevel
-from typing import Any, List, Optional, cast
+from typing import Any, List, Optional, cast, Literal, Union
 
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, GroupAction, ExecuteProcess, Shutdown, RegisterEventHandler
@@ -128,7 +128,15 @@ def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[Laun
                 for logger in mod.loggers:
                     args += ['--log-level',
                              f'{logger.node_name}:={log_level_map[logger.log_level]}']
-            cls = ROSNode if not mod.handle_lifecycle else LifecycleNode
+            if isinstance(mod.handle_lifecycle, bool):
+                cls = ROSNode if not mod.handle_lifecycle else LifecycleNode
+                handle_lifecycle = ['configuration',
+                                    'activation'] if mod.handle_lifecycle else []
+            else:
+                assert not ('activation' in mod.handle_lifecycle and
+                            'configuration' not in mod.handle_lifecycle), f'Activation of {mod.package} without configuration'
+                handle_lifecycle = mod.handle_lifecycle
+                cls = LifecycleNode
             desc = cls(
                 package=mod.package,
                 executable=mod.executable,
@@ -140,7 +148,8 @@ def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[Laun
                 namespace=''
             )
             modules.append(desc)
-            if mod.handle_lifecycle:
+
+            if 'configuration' in handle_lifecycle:
                 handler_configure = RegisterEventHandler(
                     event_handler=OnProcessStart(
                         target_action=desc,
@@ -155,6 +164,9 @@ def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[Laun
                         ],
                     ),
                 )
+                modules += [handler_configure]
+
+            if 'activation' in handle_lifecycle:
                 handler_activate = RegisterEventHandler(
                     event_handler=OnStateTransition(
                         target_lifecycle_node=cast(LifecycleNode, desc),
@@ -171,7 +183,7 @@ def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[Laun
                         ],
                     ),
                 )
-                modules += [handler_configure, handler_activate]
+                modules += [handler_activate]
         else:
             assert False
 

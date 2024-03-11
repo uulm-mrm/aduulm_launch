@@ -161,7 +161,8 @@ class Node:
     respawn: bool = False
     respawn_delay: float = 0.0
     required: bool = False
-    handle_lifecycle: bool = False
+    handle_lifecycle: bool | List[Union[Literal['activation'],
+                                        Literal['configuration']]] = False
     metadata: SaferDict[str, Any] = field(default_factory=SaferDict)
     triton_models: List[TritonModel] = field(default_factory=list)
     set_name: bool = True
@@ -291,7 +292,7 @@ class LaunchConfig:
     def add_node(self, name: str, package: str, executable: str,
                  parameters: Dict[str, Any] = {}, args: List[str] = [], output: OutputType = 'screen', emulate_tty: bool
                  = True, respawn: bool = False, respawn_delay: float = 0.0, required: bool = False, handle_lifecycle:
-                 bool = False, set_name: bool = True, metadata: dict[str, Any] = {}):
+                 bool | List[Union[Literal['activation'], Literal['configuration']]] = False, set_name: bool = True, metadata: dict[str, Any] = {}):
         assert self._getval() is None
         params = SaferDict(**parameters)
         metadata = SaferDict(**metadata)
