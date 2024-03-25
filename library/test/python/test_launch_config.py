@@ -244,10 +244,23 @@ class LaunchConfigTest(unittest.TestCase):
             config.test.test2.test_node.get_node().parameters['use_sim_time'], True)
         config.check_overrides_counts()
 
+    def test_nested_override(self):
+        params = _TestNested(a=_TestParameters2(
+            arg2='val'), b=_TestParameters3(arg3='val2'))
+        config = LaunchConfig()
+        config.overrides().test.test2.a.optional_arg = 'value1'
+        config.overrides().test.test2.b.optional_arg = 'value2'
+        with config.group('test'):
+            with config.group('test2'):
+                config.insert_overrides(params)
+        self.assertEqual(params.a.optional_arg, 'value1')
+        self.assertEqual(params.b.optional_arg, 'value2')
+        config.check_overrides_counts()
+
     def test_nested_override_from_argv(self):
         config = LaunchConfig()
-        config.parse_args(['test.test2.a@optional_arg:=value1',
-                          'test.test2.b@optional_arg:=value2'], [])
+        config.parse_args(['test.test2.a.optional_arg:=value1',
+                          'test.test2.b.optional_arg:=value2'], [])
         with config.group('test'):
             with config.group('test2'):
                 a = _TestParameters2(

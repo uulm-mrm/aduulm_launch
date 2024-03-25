@@ -461,14 +461,18 @@ class LaunchConfig:
 
         res: List[Tuple[str, List[str], Field[Any], Any, List[Any]]] = []
 
+        SEPARATOR_NAMESPACE = '.'
+        SEPARATOR_ATTRIBUTE = '.'
+
         def check_field(params_t: type, field: Field[Any], path: List[str] = []):
             if is_dataclass(field.type):
                 for f in fields(field.type):
                     check_field(field.type, f, path + [field.name])
                 return
-            key = '@'.join([*path, field.name])
+            key = SEPARATOR_ATTRIBUTE.join([*path, field.name])
             if len(self._getpath()) > 0:
-                key = '.'.join(self._getpath()) + '.' + key
+                key = SEPARATOR_NAMESPACE.join(
+                    self._getpath()) + SEPARATOR_ATTRIBUTE + key
             m = [(k, v) for k, v in overrides.items() if matches(key, k)]
             if len(m) == 0:
                 return
