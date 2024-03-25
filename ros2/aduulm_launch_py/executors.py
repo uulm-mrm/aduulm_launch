@@ -1,7 +1,7 @@
 from aduulm_launch_lib_py import LaunchConfig, LaunchConfigException
 from .executor_ros2 import execute_config_with_ros2_launch
 import sys
-from typing import Callable, ParamSpec, Concatenate, List, TypeVar
+from typing import Callable, ParamSpec, Concatenate, List, TypeVar, Optional
 from launch.actions.include_launch_description import LaunchDescriptionEntity
 from dataclasses import is_dataclass
 import argparse
@@ -12,8 +12,7 @@ P = ParamSpec('P')
 PT = TypeVar('PT')
 
 
-def call_config_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P], None], *args: P.args, **kwargs: P.kwargs):
-    config = LaunchConfig()
+def call_config_with_params(config: LaunchConfig, gen_config: Callable[Concatenate[LaunchConfig, PT, P], None], *args: P.args, **kwargs: P.kwargs):
     dataclass_params = [(i, name, param.annotation) for i, (name, param) in enumerate(
         signature(gen_config).parameters.items()) if is_dataclass(param.annotation)]
     assert len(dataclass_params) == 1
@@ -36,8 +35,10 @@ def call_config_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P
 
 
 def execute_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P], None],
-                        _exit=True, _extra_ros2_modules: List[LaunchDescriptionEntity] = [], *args: P.args, **kwargs: P.kwargs):
-    config, sys_args = call_config_with_params(gen_config, *args, **kwargs)
+                        _exit=True, _extra_ros2_modules: List[LaunchDescriptionEntity] = [], *args: P.args, _initial_config: Optional[LaunchConfig] = None, **kwargs: P.kwargs):
+    config = LaunchConfig() if _initial_config is None else _initial_config
+    config, sys_args = call_config_with_params(
+        config, gen_config, *args, **kwargs)
     return _execute(config, _debug=sys_args.debug, _exit=_exit, _extra_ros2_modules=_extra_ros2_modules)
 
 
