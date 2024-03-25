@@ -459,12 +459,19 @@ class LaunchConfig:
                 return issubclass(test_t, origin)
             return issubclass(test_t, t)
 
-        res: List[Tuple[str, Field[Any], Any, List[Any]]] = []
-        for field in fields(params_t):
-            key = '.'.join(self._getpath() + [field.name])
+        res: List[Tuple[str, List[str], Field[Any], Any, List[Any]]] = []
+
+        def check_field(params_t: type, field: Field[Any], path: List[str] = []):
+            if is_dataclass(field.type):
+                for f in fields(field.type):
+                    check_field(field.type, f, path + [field.name])
+                return
+            key = '@'.join([*path, field.name])
+            if len(self._getpath()) > 0:
+                key = '.'.join(self._getpath()) + '.' + key
             m = [(k, v) for k, v in overrides.items() if matches(key, k)]
             if len(m) == 0:
-                continue
+                return
             # should not have been inserted if multiple patterns match
             assert len(m) == 1
             k, (v, _, lst) = m[0]
@@ -483,7 +490,10 @@ class LaunchConfig:
             if not accepts_type(field.type, type(v)):
                 raise LaunchConfigException(
                     f'Attribute {field.name} of {params_t} was overridden by override {k} with value {v} of type {type(v)} but type should be {field.type}!')
-            res.append((k, field, v, lst))
+            res.append((k, [*path, field.name], field, v, lst))
+
+        for field in fields(params_t):
+            check_field(params_t, field)
         return res
 
     def inc_override_count(self, k: str, params: Any):
@@ -495,7 +505,7 @@ class LaunchConfig:
 
     def insert_overrides(self, params: Any):
         assert is_dataclass(params)
-        for k, field, v, lst in self.get_overrides(type(params)):
+        for k, path, field, v, lst in self.get_overrides(type(params)):
             if not isinstance(field.default, _MISSING_TYPE):
                 default = field.default
             else:
@@ -503,11 +513,14 @@ class LaunchConfig:
                     default = None
                 else:
                     default = field.default_factory()
-            val = getattr(params, field.name)
+            struct = params
+            for p in path[:-1]:
+                struct = getattr(struct, p)
+            val = getattr(struct, path[-1])
             if val != default and val != v and params not in lst:
                 print(
                     f'Warning: Attribute {field.name} of {params.__class__} was already assigned the value {val} and was now overriden by override {k} with value {v}')
-            setattr(params, field.name, v)
+            setattr(struct, path[-1], v)
             self.inc_override_count(k, params)
 
     def check_overrides_counts(self):
