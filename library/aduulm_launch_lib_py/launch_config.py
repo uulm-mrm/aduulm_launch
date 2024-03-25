@@ -18,6 +18,11 @@ class LaunchConfigException(Exception):
     pass
 
 
+SEPARATOR_NAMESPACE = '.'
+SEPARATOR_ATTRIBUTE = '.'
+_isgenericpattern = re.compile(r'(^|\.)__?\.')
+
+
 class SaferDict(Generic[K, V], dict[K, V]):
     # only allow __setitem__ if key already exists
     def __setitem__(self, key: K, value: V):
@@ -461,9 +466,6 @@ class LaunchConfig:
 
         res: List[Tuple[str, List[str], Field[Any], Any, List[Any]]] = []
 
-        SEPARATOR_NAMESPACE = '.'
-        SEPARATOR_ATTRIBUTE = '.'
-
         def check_field(params_t: type, field: Field[Any], path: List[str] = []):
             if is_dataclass(field.type):
                 for f in fields(field.type):
@@ -536,6 +538,10 @@ class LaunchConfig:
         if len(unused_overrides) != 0:
             raise LaunchConfigException(
                 f'The following {_type} overrides were specified but were not applied. Maybe a typo or someone forgot to call insert_overrides()? {unused_overrides}')
+        multiply_used_overrides = [k for k, (_, e, _) in overrides.items(
+        ) if e > 1 and _isgenericpattern.search(k) is None]
+        if len(multiply_used_overrides) != 0:
+            print(f'The following {_type} overrides were applied multiple times although they do not contain wildcards. This is not an error, but make sure that your launch file is really correct. {multiply_used_overrides}')
 
     def parse_args(self, args: List[str], params: List[str]):
         def parse(lst: List[str], overrides: Dict[str, Tuple[Any, int, List[Any]]]):
