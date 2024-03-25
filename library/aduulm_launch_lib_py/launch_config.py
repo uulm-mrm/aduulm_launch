@@ -469,6 +469,13 @@ class LaunchConfig:
                 v = Path(v)
             elif isinstance(v, str) and accepts_type(field.type, PurePath):
                 v = PurePath(v)
+            elif isinstance(v, str) and accepts_type(field.type, LogLevel):
+                log_level_name = v[0].upper() + v[1:].lower()
+                try:
+                    v = LogLevel[log_level_name]
+                except KeyError:
+                    raise LaunchConfigException(
+                        f'Attribute {field.name} of {params_t} was overridden by override {k} with invalid value \'{v}\', valid values are {[v.name for v in LogLevel]}!')
             if not accepts_type(field.type, type(v)):
                 raise LaunchConfigException(
                     f'Attribute {field.name} of {params_t} was overridden by override {k} with value {v} of type {type(v)} but type should be {field.type}!')
