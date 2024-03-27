@@ -538,10 +538,15 @@ class LaunchConfig:
         if len(unused_overrides) != 0:
             raise LaunchConfigException(
                 f'The following {_type} overrides were specified but were not applied. Maybe a typo or someone forgot to call insert_overrides()? {unused_overrides}')
-        multiply_used_overrides = [k for k, (_, e, _) in overrides.items(
+        multiply_used_overrides = [(k, lst) for k, (_, e, lst) in overrides.items(
         ) if e > 1 and _isgenericpattern.search(k) is None]
         if len(multiply_used_overrides) != 0:
-            print(f'The following {_type} overrides were applied multiple times although they do not contain wildcards. This is not an error, but make sure that your launch file is really correct. {multiply_used_overrides}')
+            print(f'The following {_type} overrides were applied multiple times although they do not contain wildcards. This is not an error, but make sure that your launch file is really correct.')
+            for k, lst in multiply_used_overrides:
+                print(f"{k} is used by the following dataclasses:")
+                for e in lst:
+                    print(f"  {e}")
+                print()
 
     def parse_args(self, args: List[str], params: List[str]):
         def parse(lst: List[str], overrides: Dict[str, Tuple[Any, int, List[Any]]]):
