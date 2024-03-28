@@ -145,7 +145,8 @@ def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[Laun
                 arguments=args,
                 **handle_common(mod),
                 on_exit=None if not mod.required else Shutdown(),
-                namespace=''
+                namespace='',
+                additional_env=mod.additional_env.tostrdict()
             )
             modules.append(desc)
 
