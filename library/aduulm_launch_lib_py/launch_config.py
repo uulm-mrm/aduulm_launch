@@ -164,6 +164,7 @@ class Node:
     handle_lifecycle: bool | List[Union[Literal['activation'],
                                         Literal['configuration']]] = False
     metadata: SaferDict[str, Any] = field(default_factory=SaferDict)
+    additional_env: SaferDict[str, Any] = field(default_factory=SaferDict)
     triton_models: List[TritonModel] = field(default_factory=list)
     set_name: bool = True
 
@@ -292,14 +293,17 @@ class LaunchConfig:
     def add_node(self, name: str, package: str, executable: str,
                  parameters: Dict[str, Any] = {}, args: List[str] = [], output: OutputType = 'screen', emulate_tty: bool
                  = True, respawn: bool = False, respawn_delay: float = 0.0, required: bool = False, handle_lifecycle:
-                 bool | List[Union[Literal['activation'], Literal['configuration']]] = False, set_name: bool = True, metadata: dict[str, Any] = {}):
+                 bool | List[Union[Literal['activation'], Literal['configuration']]] = False, set_name: bool = True,
+                 metadata: dict[str, Any] = {}, additional_env: dict[str, Any] = {}):
         assert self._getval() is None
         params = SaferDict(**parameters)
         metadata = SaferDict(**metadata)
+        additional_env = SaferDict(**additional_env)
         self._insert_param_overrides(name, params)
         node = Node(package, executable, parameters=params,
                     args=args[:], output=output, emulate_tty=emulate_tty, respawn=respawn, respawn_delay=respawn_delay,
-                    required=required, handle_lifecycle=handle_lifecycle, set_name=set_name, metadata=metadata)
+                    required=required, handle_lifecycle=handle_lifecycle, set_name=set_name, metadata=metadata,
+                    additional_env=additional_env)
         self.add(name, node)
         return node
 
