@@ -18,6 +18,11 @@ class LaunchConfigException(Exception):
     pass
 
 
+SEPARATOR_NAMESPACE = '.'
+SEPARATOR_ATTRIBUTE = '.'
+_isgenericpattern = re.compile(r'(^|\.)__?\.')
+
+
 class SaferDict(Generic[K, V], dict[K, V]):
     # only allow __setitem__ if key already exists
     def __setitem__(self, key: K, value: V):
@@ -459,12 +464,20 @@ class LaunchConfig:
                 return issubclass(test_t, origin)
             return issubclass(test_t, t)
 
-        res: List[Tuple[str, Field[Any], Any, List[Any]]] = []
-        for field in fields(params_t):
-            key = '.'.join(self._getpath() + [field.name])
+        res: List[Tuple[str, List[str], Field[Any], Any, List[Any]]] = []
+
+        def check_field(params_t: type, field: Field[Any], path: List[str] = []):
+            if is_dataclass(field.type):
+                for f in fields(field.type):
+                    check_field(field.type, f, path + [field.name])
+                return
+            key = SEPARATOR_ATTRIBUTE.join([*path, field.name])
+            if len(self._getpath()) > 0:
+                key = SEPARATOR_NAMESPACE.join(
+                    self._getpath()) + SEPARATOR_ATTRIBUTE + key
             m = [(k, v) for k, v in overrides.items() if matches(key, k)]
             if len(m) == 0:
-                continue
+                return
             # should not have been inserted if multiple patterns match
             assert len(m) == 1
             k, (v, _, lst) = m[0]
@@ -483,7 +496,10 @@ class LaunchConfig:
             if not accepts_type(field.type, type(v)):
                 raise LaunchConfigException(
                     f'Attribute {field.name} of {params_t} was overridden by override {k} with value {v} of type {type(v)} but type should be {field.type}!')
-            res.append((k, field, v, lst))
+            res.append((k, [*path, field.name], field, v, lst))
+
+        for field in fields(params_t):
+            check_field(params_t, field)
         return res
 
     def inc_override_count(self, k: str, params: Any):
@@ -495,7 +511,7 @@ class LaunchConfig:
 
     def insert_overrides(self, params: Any):
         assert is_dataclass(params)
-        for k, field, v, lst in self.get_overrides(type(params)):
+        for k, path, field, v, lst in self.get_overrides(type(params)):
             if not isinstance(field.default, _MISSING_TYPE):
                 default = field.default
             else:
@@ -503,11 +519,14 @@ class LaunchConfig:
                     default = None
                 else:
                     default = field.default_factory()
-            val = getattr(params, field.name)
+            struct = params
+            for p in path[:-1]:
+                struct = getattr(struct, p)
+            val = getattr(struct, path[-1])
             if val != default and val != v and params not in lst:
                 print(
                     f'Warning: Attribute {field.name} of {params.__class__} was already assigned the value {val} and was now overriden by override {k} with value {v}')
-            setattr(params, field.name, v)
+            setattr(struct, path[-1], v)
             self.inc_override_count(k, params)
 
     def check_overrides_counts(self):
@@ -519,6 +538,15 @@ class LaunchConfig:
         if len(unused_overrides) != 0:
             raise LaunchConfigException(
                 f'The following {_type} overrides were specified but were not applied. Maybe a typo or someone forgot to call insert_overrides()? {unused_overrides}')
+        multiply_used_overrides = [(k, lst) for k, (_, e, lst) in overrides.items(
+        ) if e > 1 and _isgenericpattern.search(k) is None]
+        if len(multiply_used_overrides) != 0:
+            print(f'The following {_type} overrides were applied multiple times although they do not contain wildcards. This is not an error, but make sure that your launch file is really correct.')
+            for k, lst in multiply_used_overrides:
+                print(f"{k} is used by the following dataclasses:")
+                for e in lst:
+                    print(f"  {e}")
+                print()
 
     def parse_args(self, args: List[str], params: List[str]):
         def parse(lst: List[str], overrides: Dict[str, Tuple[Any, int, List[Any]]]):
