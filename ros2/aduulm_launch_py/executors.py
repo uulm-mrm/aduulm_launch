@@ -1,11 +1,14 @@
+import argparse
+import pathlib
+import sys
+from dataclasses import is_dataclass
+from inspect import signature
+from typing import Callable, ParamSpec, Concatenate, List, TypeVar, Optional
+
+from launch.actions.include_launch_description import LaunchDescriptionEntity
+
 from aduulm_launch_lib_py import LaunchConfig, LaunchConfigException
 from .executor_ros2 import execute_config_with_ros2_launch
-import sys
-from typing import Callable, ParamSpec, Concatenate, List, TypeVar, Optional
-from launch.actions.include_launch_description import LaunchDescriptionEntity
-from dataclasses import is_dataclass
-import argparse
-from inspect import signature
 
 
 P = ParamSpec('P')
@@ -55,8 +58,12 @@ def _parse_args(config: LaunchConfig):
     parser.add_argument('args', type=str, nargs='*', default=[])
     parser.add_argument('-p', '--params', type=str, nargs='+', default=[])
     parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('-o', '--overrides_file', type=str)
     sys_args = parser.parse_args()
-    config.parse_args(sys_args.args, sys_args.params)
+    if sys_args.overrides_file:
+        overrides_file = pathlib.Path(sys_args.overrides_file)
+        assert overrides_file.exists(), overrides_file
+    config.parse_args(sys_args.args, sys_args.params, sys_args.overrides_file)
     return sys_args
 
 

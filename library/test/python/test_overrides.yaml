@@ -1,0 +1,3 @@
+test:
+  test2:
+    optional_arg2: 'preset'

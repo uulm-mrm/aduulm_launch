@@ -1,3 +1,4 @@
+import pathlib
 import unittest
 from aduulm_launch_lib_py.launch_config import LaunchConfig, SaferDict, LaunchGroup, Node, LaunchConfigException
 from typing import Any, cast
@@ -272,6 +273,19 @@ class LaunchConfigTest(unittest.TestCase):
         config.check_overrides_counts()
         self.assertEqual(params.a.optional_arg, 'value1')
         self.assertEqual(params.b.optional_arg, 'value2')
+
+    def test_override_from_yaml(self):
+        overrides_file = pathlib.Path(__file__).parent / 'test_overrides.yaml'
+        config = LaunchConfig()
+        config.parse_args([], [], overrides_file)
+        with config.group('test'):
+            with config.group('test2'):
+                params = _TestParameters(
+                    required_arg='val', optional_arg1='other_val')
+                config.insert_overrides(params)
+                self._add_test_node(config)
+        self.assertEqual(params.optional_arg2, 'preset')
+        config.check_overrides_counts()
 
     def test_remappings(self):
         config = LaunchConfig()
