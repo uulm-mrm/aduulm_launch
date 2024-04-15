@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pathlib
 import re
 from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass, \
     Field
@@ -553,9 +552,7 @@ class LaunchConfig:
                     print(f"  {e}")
                 print()
 
-    def load_overrides_from_yaml(
-            self, overrides_file: Optional[pathlib.Path]):
-
+    def load_overrides_from_yaml(self, overrides_file: Optional[Path]):
         overrides = self._getoverrides()
         with open(overrides_file, 'r') as f:
             overrides_data = yaml.load(f, Loader=yaml.SafeLoader)
@@ -563,16 +560,16 @@ class LaunchConfig:
         def _yaml_iter(elem, prefix: Optional[str] = None):
             if isinstance(elem, dict):
                 for key, val in elem.items():
-                    if prefix is None:
-                        _yaml_iter(val, key)
-                    else:
-                        _yaml_iter(val, f'{prefix}.{key}')
-            else:
-                overrides[prefix] = (elem, 0, [])
+                    _yaml_iter(
+                        val, key if prefix is None else f'{prefix}.{key}')
+                return
+            assert prefix is not None
+            check_override_valid(prefix, overrides)
+            overrides[prefix] = (elem, 0, [])
 
         _yaml_iter(overrides_data)
 
-    def parse_args(self, args: List[str], params: List[str], overrides_file: Optional[pathlib.Path] = None):
+    def parse_args(self, args: List[str], params: List[str], overrides_file: Optional[Path] = None):
         def parse(lst: List[str], overrides: Dict[str, Tuple[Any, int, List[Any]]]):
             for arg in lst:
                 assert ':=' in arg
