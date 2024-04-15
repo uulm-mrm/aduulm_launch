@@ -556,6 +556,8 @@ class LaunchConfig:
         overrides = self._getoverrides()
         with open(overrides_file, 'r') as f:
             overrides_data = yaml.load(f, Loader=yaml.SafeLoader)
+        if overrides_data is None:
+            return
 
         def _yaml_iter(elem, prefix: Optional[str] = None):
             if isinstance(elem, dict):
