@@ -1,13 +1,17 @@
 from __future__ import annotations
-from typing import Dict, Any, Tuple, List, Callable, Generator, Optional, Concatenate, ParamSpec, cast, Literal, Optional, TypeVar, Generic, Union, get_args, get_origin
-from types import UnionType
-from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass, Field
-from functools import lru_cache
+
 import re
-import yaml
+from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass, \
+    Field
 from enum import IntEnum
-from pathlib import Path, PurePath
+from functools import lru_cache
 from itertools import chain
+from pathlib import Path, PurePath
+from types import UnionType
+from typing import Dict, Any, Tuple, List, Callable, Generator, Concatenate, \
+    ParamSpec, Literal, Optional, TypeVar, Generic, Union, get_args, get_origin
+
+import yaml
 
 
 K = TypeVar('K')
@@ -548,7 +552,24 @@ class LaunchConfig:
                     print(f"  {e}")
                 print()
 
-    def parse_args(self, args: List[str], params: List[str]):
+    def load_overrides_from_yaml(self, overrides_file: Optional[Path]):
+        overrides = self._getoverrides()
+        with open(overrides_file, 'r') as f:
+            overrides_data = yaml.load(f, Loader=yaml.SafeLoader)
+
+        def _yaml_iter(elem, prefix: Optional[str] = None):
+            if isinstance(elem, dict):
+                for key, val in elem.items():
+                    _yaml_iter(
+                        val, key if prefix is None else f'{prefix}.{key}')
+                return
+            assert prefix is not None
+            check_override_valid(prefix, overrides)
+            overrides[prefix] = (elem, 0, [])
+
+        _yaml_iter(overrides_data)
+
+    def parse_args(self, args: List[str], params: List[str], overrides_file: Optional[Path] = None):
         def parse(lst: List[str], overrides: Dict[str, Tuple[Any, int, List[Any]]]):
             for arg in lst:
                 assert ':=' in arg
@@ -559,6 +580,8 @@ class LaunchConfig:
 
         parse(args, self._getoverrides())
         parse(params, self._getparam_overrides())
+        if overrides_file is not None:
+            self.load_overrides_from_yaml(overrides_file)
 
     P1 = ParamSpec('P1')
 
