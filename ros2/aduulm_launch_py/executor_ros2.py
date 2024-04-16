@@ -12,6 +12,8 @@ import sys
 def execute_config_with_ros2_launch(config: LaunchConfig, debug: bool = False, noninteractive: Optional[bool] = None, extra_modules: List[LaunchDescriptionEntity] = []):
     launch_description = convert_config_to_ros2_launch(
         config, extra_modules=extra_modules)
+    if debug:
+        print_launchdescription(launch_description)
 
     return run_launchdescription(launch_description, debug=debug, noninteractive=noninteractive)
 

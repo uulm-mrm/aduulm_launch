@@ -62,13 +62,14 @@ def handle_activation(node_desc: LifecycleNode):
 
 
 def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[LaunchDescriptionEntity] = []):
-    modules = []
+    modules: List[LaunchDescriptionEntity] = []
 
-    def recurse(config: LaunchConfig, mod: AnyLaunch, name: Optional[str], modules: List[Any]):
+    def recurse(config: LaunchConfig, mod: AnyLaunch, name: Optional[str], modules: List[LaunchDescriptionEntity]):
         if isinstance(mod, LaunchGroup):
             if name is not None:
                 config = config.group(name)
-            group_modules = []
+            group_modules: List[LaunchDescriptionEntity] = []
+            group_modules += mod.ros2_entities
             for key, child in mod.modules.items():
                 recurse(config, child, key, group_modules)
             if name is not None:

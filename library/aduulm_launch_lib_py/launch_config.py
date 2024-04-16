@@ -206,6 +206,7 @@ class SubLaunchROS:
 class LaunchGroup:
     modules: SaferDict[str, 'Executable | Node | SubLaunchROS | LaunchGroup'] = field(
         default_factory=SaferDict)
+    ros2_entities: List[LaunchDescriptionEntity] = field(default_factory=list)
 
 
 LeafLaunch = Executable | Node | SubLaunchROS
@@ -626,6 +627,10 @@ class LaunchConfig:
         info = ROSLoggerInfo(node_name=node_name, log_level=log_level)
         node.loggers.append(info)
         return info
+
+    def add_ros2_entity(self, ros2_entity: LaunchDescriptionEntity):
+        assert self._getval() is None
+        self._getdata().ros2_entities.append(ros2_entity)
 
 
 @lru_cache(maxsize=256, typed=True)
