@@ -67,7 +67,7 @@ def dataclass_from_dict(params_cls: Callable[..., T1], config: Dict[str, Any], i
             return cls(**val)
         except TypeError as e:
             raise LaunchConfigException(
-                f"Instantiation of {cls} from {val} constructed from {yaml_path} failed. Maybe a parameter is missing in the YAML file or has an incorrect type? Check the error message above.") from e
+                f"Instantiation of {cls} from {val} failed. Maybe a parameter is missing in the YAML file or has an incorrect type? Check the error message above.") from e
     assert is_dataclass(params_cls) and isinstance(params_cls, type)
     return cast(T1, convert(config, params_cls))
 
