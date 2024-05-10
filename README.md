@@ -10,10 +10,10 @@ This is research code, expect that it changes often and any fitness for a partic
 
 ### Aduulm Repository Metadata
 
-- last updated: 01/2024
+- last updated: 05/2024
 - name: aduulm_launch
 - category: tooling
-- maintainers: Jan Strohbeck
+- maintainers: Jan Strohbeck, Johannes Kopp
 - license: internal use only
 - HW dependencies: none
 
