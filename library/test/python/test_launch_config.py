@@ -274,6 +274,17 @@ class LaunchConfigTest(unittest.TestCase):
         self.assertEqual(params.a.optional_arg, 'value1')
         self.assertEqual(params.b.optional_arg, 'value2')
 
+    def test_dataclass_init_from_nested_override_from_argv(self):
+        config = LaunchConfig()
+        config.parse_args(['a.arg2:=val', 'a.optional_arg:=value1',
+                          'b.arg3:=val2', 'b.optional_arg:=value2'], [])
+        params = config.instantiate_dataclass_from_overrides(_TestNested)
+        config.check_overrides_counts()
+        self.assertEqual(params.a.arg2, 'val')
+        self.assertEqual(params.a.optional_arg, 'value1')
+        self.assertEqual(params.b.arg3, 'val2')
+        self.assertEqual(params.b.optional_arg, 'value2')
+
     def test_override_from_yaml(self):
         overrides_file = pathlib.Path(__file__).parent / 'test_overrides.yaml'
         config = LaunchConfig()

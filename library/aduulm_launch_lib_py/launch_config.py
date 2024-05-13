@@ -8,7 +8,7 @@ from functools import lru_cache
 from itertools import chain
 from pathlib import Path, PurePath
 from types import UnionType
-from typing import Dict, Any, Tuple, List, Callable, Generator, Concatenate, \
+from typing import cast, Dict, Any, Tuple, List, Callable, Generator, Concatenate, \
     ParamSpec, Literal, Optional, TypeVar, Generic, Union, get_args, get_origin
 
 import yaml
@@ -506,6 +506,42 @@ class LaunchConfig:
         for field in fields(params_t):
             check_field(params_t, field)
         return res
+
+    ParamsT = TypeVar('ParamsT')
+
+    def instantiate_dataclass_from_overrides(self, params_t: Callable[..., ParamsT]) -> ParamsT:
+        overrides = self._getoverrides()
+
+        def instantiate(t: Any, path: List[str]):
+            assert is_dataclass(t)
+            values = {}
+            used = []
+            for field in fields(t):
+                if is_dataclass(field.type):
+                    values[field.name] = instantiate(
+                        field.type, path + [field.name])
+                    continue
+                key = SEPARATOR_ATTRIBUTE.join([*path, field.name])
+                if len(self._getpath()) > 0:
+                    key = SEPARATOR_NAMESPACE.join(
+                        self._getpath()) + SEPARATOR_ATTRIBUTE + key
+                m = [(k, v) for k, v in overrides.items() if matches(key, k)]
+                if len(m) == 0:
+                    continue
+                # should not have been inserted if multiple patterns match
+                assert len(m) == 1
+                k, (v, *_) = m[0]
+                values[field.name] = v
+                used.append(k)
+            try:
+                params = t(**values)
+            except TypeError as e:
+                raise LaunchConfigException(
+                    f'Could not construct instance of dataclass type {t}! Probably the class has required fields but no override was provided!') from e
+            for k in used:
+                self.inc_override_count(k, params)
+            return params
+        return cast(Any, instantiate(params_t, []))
 
     def inc_override_count(self, k: str, params: Any):
         overrides = self._getoverrides()
