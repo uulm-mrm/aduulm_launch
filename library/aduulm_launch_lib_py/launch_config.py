@@ -212,6 +212,8 @@ class LaunchGroup:
 LeafLaunch = Executable | Node | SubLaunchROS
 AnyLaunch = LeafLaunch | LaunchGroup
 
+OverridesT = Dict[str, Tuple[Any, int, List[Any]]]
+
 
 class LaunchConfig:
     def __init__(self, config: LaunchConfig | None = None, path: Optional[List[str]] = None, data: Optional[LaunchGroup] = None, val: Optional[LeafLaunch] = None):
@@ -220,8 +222,8 @@ class LaunchConfig:
         self._data = data if data is not None else LaunchGroup()
         self._val: Optional[LeafLaunch] = val
         # key -> [Value, Usage count]
-        self._overrides: Dict[str, Tuple[Any, int, List[Any]]] = {}
-        self._param_overrides: Dict[str, Tuple[Any, int, List[Any]]] = {}
+        self._overrides: OverridesT = {}
+        self._param_overrides: OverridesT = {}
 
     def _getconfig(self) -> LaunchConfig:
         return object.__getattribute__(self, '_config')
@@ -241,10 +243,10 @@ class LaunchConfig:
     def _getold_path(self) -> List[str]:
         return object.__getattribute__(self, '_old_path')
 
-    def _getoverrides(self) -> Dict[str, Tuple[Any, int, List[Any]]]:
+    def _getoverrides(self) -> OverridesT:
         return object.__getattribute__(self, '_overrides')
 
-    def _getparam_overrides(self) -> Dict[str, Tuple[Any, int, List[Any]]]:
+    def _getparam_overrides(self) -> OverridesT:
         return object.__getattribute__(self, '_param_overrides')
 
     def __enter__(self):
@@ -451,6 +453,19 @@ class LaunchConfig:
             args.add(param_name, v)
             overrides[orig_k] = (v, usage_cnt+1, lst)
 
+    def _get_matching_override(self, path: List[str], field: Field[Any], overrides: OverridesT):
+        key = SEPARATOR_ATTRIBUTE.join([*path, field.name])
+        if len(self._getpath()) > 0:
+            key = SEPARATOR_NAMESPACE.join(
+                self._getpath()) + SEPARATOR_ATTRIBUTE + key
+        m = [(k, v) for k, v in overrides.items() if matches(key, k)]
+        if len(m) == 0:
+            return
+        # should not have been inserted if multiple patterns match
+        assert len(m) == 1
+        k, (v, usage_cnt, lst) = m[0]
+        return k, v, usage_cnt, lst
+
     # get overrides at current path for dataclass
     def get_overrides(self, params_t: type):
         assert is_dataclass(params_t)
@@ -476,16 +491,10 @@ class LaunchConfig:
                 for f in fields(field.type):
                     check_field(field.type, f, path + [field.name])
                 return
-            key = SEPARATOR_ATTRIBUTE.join([*path, field.name])
-            if len(self._getpath()) > 0:
-                key = SEPARATOR_NAMESPACE.join(
-                    self._getpath()) + SEPARATOR_ATTRIBUTE + key
-            m = [(k, v) for k, v in overrides.items() if matches(key, k)]
-            if len(m) == 0:
+            _ov = self._get_matching_override(path, field, overrides)
+            if _ov is None:
                 return
-            # should not have been inserted if multiple patterns match
-            assert len(m) == 1
-            k, (v, _, lst) = m[0]
+            k, v, _, lst = _ov
             # Path is derived from Purepath, so check for Path first
             if isinstance(v, str) and accepts_type(field.type, Path):
                 v = Path(v)
@@ -521,16 +530,10 @@ class LaunchConfig:
                     values[field.name] = instantiate(
                         field.type, path + [field.name])
                     continue
-                key = SEPARATOR_ATTRIBUTE.join([*path, field.name])
-                if len(self._getpath()) > 0:
-                    key = SEPARATOR_NAMESPACE.join(
-                        self._getpath()) + SEPARATOR_ATTRIBUTE + key
-                m = [(k, v) for k, v in overrides.items() if matches(key, k)]
-                if len(m) == 0:
+                _ov = self._get_matching_override(path, field, overrides)
+                if _ov is None:
                     continue
-                # should not have been inserted if multiple patterns match
-                assert len(m) == 1
-                k, (v, *_) = m[0]
+                k, v, *_ = _ov
                 values[field.name] = v
                 used.append(k)
             try:
@@ -568,19 +571,19 @@ class LaunchConfig:
                 print(
                     f'Warning: Attribute {field.name} of {params.__class__} was already assigned the value {val} and was now overriden by override {k} with value {v}')
             setattr(struct, path[-1], v)
-            self.inc_override_count(k, params)
+            self.inc_override_count(k, struct)
 
     def check_overrides_counts(self):
         self._check_overrides_counts(self._getoverrides(), 'argument')
         self._check_overrides_counts(self._getparam_overrides(), 'parameter')
 
-    def _check_overrides_counts(self, overrides: Dict[str, Tuple[Any, int, List[Any]]], _type: str):
+    def _check_overrides_counts(self, overrides: OverridesT, _type: str):
         unused_overrides = [k for k, (_, e, _) in overrides.items() if e == 0]
         if len(unused_overrides) != 0:
             raise LaunchConfigException(
                 f'The following {_type} overrides were specified but were not applied. Maybe a typo or someone forgot to call insert_overrides()? {unused_overrides}')
         multiply_used_overrides = [(k, lst) for k, (_, e, lst) in overrides.items(
-        ) if e > 1 and _isgenericpattern.search(k) is None]
+        ) if e > 1 and _isgenericpattern.search(k) is None and (len(lst) > 1 or _type == 'parameter')]
         if len(multiply_used_overrides) != 0:
             print(f'The following {_type} overrides were applied multiple times although they do not contain wildcards. This is not an error, but make sure that your launch file is really correct.')
             for k, lst in multiply_used_overrides:
@@ -589,7 +592,7 @@ class LaunchConfig:
                     print(f"  {e}")
                 print()
 
-    def load_overrides_from_yaml(self, overrides_file: Optional[Path]):
+    def load_overrides_from_yaml(self, overrides_file: Path):
         overrides = self._getoverrides()
         with open(overrides_file, 'r') as f:
             overrides_data = yaml.load(f, Loader=yaml.SafeLoader)
@@ -609,7 +612,7 @@ class LaunchConfig:
         _yaml_iter(overrides_data)
 
     def parse_args(self, args: List[str], params: List[str], overrides_file: Optional[Path] = None):
-        def parse(lst: List[str], overrides: Dict[str, Tuple[Any, int, List[Any]]]):
+        def parse(lst: List[str], overrides: OverridesT):
             for arg in lst:
                 assert ':=' in arg
                 key, val = arg.split(':=')
@@ -686,7 +689,7 @@ def matches(key: str, pattern: str):
     return fnmatch(key, pattern)
 
 
-def check_override_valid(key: str, overrides: Dict[str, Tuple[Any, int, List[Any]]]):
+def check_override_valid(key: str, overrides: OverridesT):
     if key in overrides:
         raise LaunchConfigException(f'Override for "{key}" already exists!')
     if len([pattern for pattern, _ in overrides.items() if matches(key, pattern)]) > 0:
@@ -698,7 +701,7 @@ def check_override_valid(key: str, overrides: Dict[str, Tuple[Any, int, List[Any
 
 
 class OverrideSetter:
-    def __init__(self, overrides: Dict[str, Tuple[Any, int, List[Any]]], path: List[str]):
+    def __init__(self, overrides: OverridesT, path: List[str]):
         object.__setattr__(self, '_overrides', overrides)
         object.__setattr__(self, '_path', path)
 
@@ -714,7 +717,7 @@ class OverrideSetter:
     def _getpath(self) -> List[str]:
         return object.__getattribute__(self, '_path')
 
-    def _getoverrides(self) -> Dict[str, Tuple[Any, int, List[Any]]]:
+    def _getoverrides(self) -> OverridesT:
         return object.__getattribute__(self, '_overrides')
 
 
