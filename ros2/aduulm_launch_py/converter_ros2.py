@@ -109,7 +109,6 @@ def convert_config_to_ros2_launch(config: LaunchConfig, extra_modules: List[Laun
                 PythonLaunchDescriptionSource(
                     os.path.join(
                         get_package_share_directory(mod.package),
-                        'launch',
                         mod.launchfile
                     )
                 ),
