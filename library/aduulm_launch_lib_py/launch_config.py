@@ -478,7 +478,7 @@ class LaunchConfig:
 
         def accepts_type(t: type, test_t: type):
             if is_union(t):
-                return len([accepts_type(t_, test_t) for t_ in get_args(t)]) > 0
+                return sum([accepts_type(t_, test_t) for t_ in get_args(t)]) > 0
             origin = get_origin(t)
             if origin is not None:
                 return issubclass(test_t, origin)
