@@ -23,14 +23,7 @@ def call_config_with_params(config: LaunchConfig, gen_config: Callable[Concatena
     arg_pos, name, params_cls = dataclass_params[0]
     assert arg_pos == 1
     assert is_dataclass(params_cls) and isinstance(params_cls, type)
-    overrides = config.get_overrides(params_cls)
-    try:
-        params = params_cls(**{k: v for k, _, _, v, _ in overrides})
-    except TypeError as e:
-        raise LaunchConfigException(
-            f'Could not construct instance of dataclass type {params_cls}! Probably the class has required fields but no override was provided!') from e
-    for k, *_ in overrides:
-        config.inc_override_count(k, params)
+    params = config.instantiate_dataclass_from_overrides(params_cls)
     assert name not in kwargs
     gen_config(config, params, *args, **kwargs)
     config.check_overrides_counts()
