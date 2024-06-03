@@ -35,6 +35,8 @@ def execute_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P], N
     config = LaunchConfig() if _initial_config is None else _initial_config
     config, sys_args = call_config_with_params(
         config, gen_config, *args, **kwargs)
+    if sys_args.list_params:
+        list_params_and_exit(config)
     return _execute(config, _debug=sys_args.debug, _exit=_exit, _extra_ros2_modules=_extra_ros2_modules)
 
 
@@ -43,6 +45,8 @@ def execute(gen_config: Callable[Concatenate[LaunchConfig, P], None],
     config = LaunchConfig()
     sys_args = _parse_args(config)
     gen_config(config, *args, **kwargs)
+    if sys_args.list_params:
+        list_params_and_exit(config)
     return _execute(config, _debug=sys_args.debug, _exit=_exit, _extra_ros2_modules=_extra_ros2_modules)
 
 
@@ -52,6 +56,7 @@ def _parse_args(config: LaunchConfig):
     parser.add_argument('-p', '--params', type=str, nargs='+', default=[])
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-o', '--overrides_file', type=str)
+    parser.add_argument('-l', '--list_params', action='store_true')
     sys_args = parser.parse_args()
     if sys_args.overrides_file:
         overrides_file = pathlib.Path(sys_args.overrides_file)
@@ -66,3 +71,12 @@ def _execute(config: LaunchConfig, _debug: bool = False, _exit=True, _extra_ros2
     if _exit:
         sys.exit(ret)
     return ret
+
+
+def list_params_and_exit(config: LaunchConfig):
+    print(f'the following params are available to override:')
+    for type1, fields in config._getavail_overrides():
+        print(f'from {type1}:')
+        for name, type2 in fields:
+            print(f'  {name}: {type2}')
+    sys.exit(0)
