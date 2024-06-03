@@ -298,6 +298,22 @@ class LaunchConfigTest(unittest.TestCase):
         self.assertEqual(params.optional_arg2, 'preset')
         config.check_overrides_counts()
 
+    def test_avail_overrides(self):
+        config = LaunchConfig()
+        config.parse_args([], [])
+        with config.group('test'):
+            with config.group('test2'):
+                params = _TestParameters(
+                    required_arg='val', optional_arg1='other_val')
+                config.insert_overrides(params)
+                self._add_test_node(config)
+        self.assertEqual(
+            config._getavail_overrides(),
+            [(_TestParameters, [
+                ('test.test2.required_arg', str),
+                ('test.test2.optional_arg1', str),
+                ('test.test2.optional_arg2', str)])])
+
     def test_remappings(self):
         config = LaunchConfig()
         with config.group('test'):
