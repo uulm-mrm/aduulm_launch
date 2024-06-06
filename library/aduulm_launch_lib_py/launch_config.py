@@ -224,6 +224,7 @@ class LaunchConfig:
         # key -> [Value, Usage count]
         self._overrides: OverridesT = {}
         self._param_overrides: OverridesT = {}
+        self._avail_overrides: List[Tuple[type, List[Tuple[str, type]]]] = []
 
     def _getconfig(self) -> LaunchConfig:
         return object.__getattribute__(self, '_config')
@@ -248,6 +249,9 @@ class LaunchConfig:
 
     def _getparam_overrides(self) -> OverridesT:
         return object.__getattribute__(self, '_param_overrides')
+
+    def _getavail_overrides(self) -> List[Tuple[type, List[Tuple[str, type]]]]:
+        return object.__getattribute__(self, '_avail_overrides')
 
     def __enter__(self):
         assert self._getval() is None
@@ -516,6 +520,22 @@ class LaunchConfig:
             check_field(params_t, field)
         return res
 
+    def _insert_avail_overrides(self, params_t: type):
+        assert is_dataclass(params_t)
+        lst = []
+
+        def visit_field(field: Field[Any], path: List[str]):
+            if is_dataclass(field.type):
+                for f in fields(field.type):
+                    visit_field(f, path + [field.name])
+                return
+            abs_path = '.'.join([*path, field.name])
+            lst.append((abs_path, field.type))
+
+        for field in fields(params_t):
+            visit_field(field, self._getpath())
+        self._avail_overrides.append((params_t, lst))
+
     ParamsT = TypeVar('ParamsT')
 
     def instantiate_dataclass_from_overrides(self, params_t: Callable[..., ParamsT]) -> ParamsT:
@@ -555,6 +575,7 @@ class LaunchConfig:
 
     def insert_overrides(self, params: Any):
         assert is_dataclass(params)
+        self._insert_avail_overrides(type(params))
         for k, path, field, v, lst in self.get_overrides(type(params)):
             if not isinstance(field.default, _MISSING_TYPE):
                 default = field.default
