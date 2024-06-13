@@ -302,6 +302,7 @@ class LaunchConfigTest(unittest.TestCase):
     def test_avail_overrides(self):
         config = LaunchConfig()
         config.parse_args([], [])
+        config.overrides().test.test2.optional_arg2 = 'foo'
         with config.group('test'):
             with config.group('test2'):
                 params = _TestParameters(
@@ -319,7 +320,7 @@ class LaunchConfigTest(unittest.TestCase):
                     default_value='val1', value='other_val'),
                 OverridableField(
                     name='test.test2.optional_arg2', type_=str,
-                    default_value='val2', value='val2')])])
+                    default_value='val2', value='foo')])])
 
     def test_remappings(self):
         config = LaunchConfig()

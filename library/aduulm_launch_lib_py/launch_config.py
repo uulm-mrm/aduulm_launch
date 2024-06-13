@@ -589,7 +589,6 @@ class LaunchConfig:
 
     def insert_overrides(self, params: Any):
         assert is_dataclass(params)
-        self._insert_avail_overrides(params)
         for k, path, field, v, lst in self.get_overrides(type(params)):
             if not isinstance(field.default, _MISSING_TYPE):
                 default = field.default
@@ -607,6 +606,7 @@ class LaunchConfig:
                     f'Warning: Attribute {field.name} of {params.__class__} was already assigned the value {val} and was now overriden by override {k} with value {v}')
             setattr(struct, path[-1], v)
             self.inc_override_count(k, struct)
+        self._insert_avail_overrides(params)
 
     def check_overrides_counts(self):
         self._check_overrides_counts(self._getoverrides(), 'argument')
