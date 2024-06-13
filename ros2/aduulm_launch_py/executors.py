@@ -77,6 +77,6 @@ def list_params_and_exit(config: LaunchConfig):
     print(f'the following params are available to override:')
     for type1, fields in config._getavail_overrides():
         print(f'from {type1}:')
-        for name, type2 in fields:
-            print(f'  {name}: {type2}')
+        for field in fields:
+            print(f'  {field.name}: {repr(field.value)} ({field.type_})')
     sys.exit(0)

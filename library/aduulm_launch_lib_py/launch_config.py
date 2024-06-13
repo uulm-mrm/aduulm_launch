@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass, \
-    Field
+    Field, MISSING
 from enum import IntEnum
 from functools import lru_cache
 from itertools import chain
@@ -215,6 +215,14 @@ AnyLaunch = LeafLaunch | LaunchGroup
 OverridesT = Dict[str, Tuple[Any, int, List[Any]]]
 
 
+@dataclass(slots=True, kw_only=True)
+class OverridableField:
+    name: str
+    type_: type
+    default_value: Any
+    value: Any
+
+
 class LaunchConfig:
     def __init__(self, config: LaunchConfig | None = None, path: Optional[List[str]] = None, data: Optional[LaunchGroup] = None, val: Optional[LeafLaunch] = None):
         self._config = config if config is not None else self
@@ -224,7 +232,7 @@ class LaunchConfig:
         # key -> [Value, Usage count]
         self._overrides: OverridesT = {}
         self._param_overrides: OverridesT = {}
-        self._avail_overrides: List[Tuple[type, List[Tuple[str, type]]]] = []
+        self._avail_overrides: List[Tuple[type, List[OverridableField]]] = []
 
     def _getconfig(self) -> LaunchConfig:
         return object.__getattribute__(self, '_config')
@@ -250,7 +258,7 @@ class LaunchConfig:
     def _getparam_overrides(self) -> OverridesT:
         return object.__getattribute__(self, '_param_overrides')
 
-    def _getavail_overrides(self) -> List[Tuple[type, List[Tuple[str, type]]]]:
+    def _getavail_overrides(self) -> List[Tuple[type, List[OverridableField]]]:
         return object.__getattribute__(self, '_avail_overrides')
 
     def __enter__(self):
@@ -520,20 +528,26 @@ class LaunchConfig:
             check_field(params_t, field)
         return res
 
-    def _insert_avail_overrides(self, params_t: type):
+    def _insert_avail_overrides(self, params: Any):
+        params_t = type(params)
         assert is_dataclass(params_t)
         lst = []
 
-        def visit_field(field: Field[Any], path: List[str]):
-            if is_dataclass(field.type):
-                for f in fields(field.type):
-                    visit_field(f, path + [field.name])
+        def visit_field(f: Field[Any], value: Any, path: List[str]):
+            if is_dataclass(f.type):
+                for f in fields(f.type):
+                    visit_field(f, getattr(value, f.name), path + [f.name])
                 return
-            abs_path = '.'.join([*path, field.name])
-            lst.append((abs_path, field.type))
+            abs_path = '.'.join([*path, f.name])
+            default_val = f.default if f.default != MISSING \
+                else f.default_factory() if f.default_factory != MISSING \
+                else None
+            lst.append(OverridableField(
+                name=abs_path, type_=f.type, default_value=default_val,
+                value=value))
 
-        for field in fields(params_t):
-            visit_field(field, self._getpath())
+        for f in fields(params_t):
+            visit_field(f, getattr(params, f.name), self._getpath())
         self._avail_overrides.append((params_t, lst))
 
     ParamsT = TypeVar('ParamsT')
@@ -575,7 +589,7 @@ class LaunchConfig:
 
     def insert_overrides(self, params: Any):
         assert is_dataclass(params)
-        self._insert_avail_overrides(type(params))
+        self._insert_avail_overrides(params)
         for k, path, field, v, lst in self.get_overrides(type(params)):
             if not isinstance(field.default, _MISSING_TYPE):
                 default = field.default
