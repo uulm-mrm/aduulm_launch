@@ -313,13 +313,13 @@ class LaunchConfigTest(unittest.TestCase):
             config._getavail_overrides(),
             [(_TestParameters, [
                 OverridableField(
-                    name='test.test2.required_arg', type_=str,
+                    name='test.test2.required_arg', field_type=str,
                     default_value=None, value='val'),
                 OverridableField(
-                    name='test.test2.optional_arg1', type_=str,
+                    name='test.test2.optional_arg1', field_type=str,
                     default_value='val1', value='other_val'),
                 OverridableField(
-                    name='test.test2.optional_arg2', type_=str,
+                    name='test.test2.optional_arg2', field_type=str,
                     default_value='val2', value='foo')])])
 
     def test_remappings(self):

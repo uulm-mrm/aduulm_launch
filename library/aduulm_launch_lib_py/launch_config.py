@@ -218,7 +218,7 @@ OverridesT = Dict[str, Tuple[Any, int, List[Any]]]
 @dataclass(slots=True, kw_only=True)
 class OverridableField:
     name: str
-    type_: type
+    field_type: type
     default_value: Any
     value: Any
 
@@ -543,7 +543,7 @@ class LaunchConfig:
                 else f.default_factory() if f.default_factory != MISSING \
                 else None
             lst.append(OverridableField(
-                name=abs_path, type_=f.type, default_value=default_val,
+                name=abs_path, field_type=f.type, default_value=default_val,
                 value=value))
 
         for f in fields(params_t):
