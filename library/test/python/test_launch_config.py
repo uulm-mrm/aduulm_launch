@@ -1,6 +1,7 @@
 import pathlib
 import unittest
-from aduulm_launch_lib_py.launch_config import LaunchConfig, SaferDict, LaunchGroup, Node, LaunchConfigException
+from aduulm_launch_lib_py.launch_config import LaunchConfig, SaferDict, \
+    LaunchGroup, Node, LaunchConfigException, OverridableField
 from typing import Any, cast
 from dataclasses import dataclass
 
@@ -301,6 +302,7 @@ class LaunchConfigTest(unittest.TestCase):
     def test_avail_overrides(self):
         config = LaunchConfig()
         config.parse_args([], [])
+        config.overrides().test.test2.optional_arg2 = 'foo'
         with config.group('test'):
             with config.group('test2'):
                 params = _TestParameters(
@@ -310,9 +312,15 @@ class LaunchConfigTest(unittest.TestCase):
         self.assertEqual(
             config._getavail_overrides(),
             [(_TestParameters, [
-                ('test.test2.required_arg', str),
-                ('test.test2.optional_arg1', str),
-                ('test.test2.optional_arg2', str)])])
+                OverridableField(
+                    name='test.test2.required_arg', field_type=str,
+                    default_value=None, value='val'),
+                OverridableField(
+                    name='test.test2.optional_arg1', field_type=str,
+                    default_value='val1', value='other_val'),
+                OverridableField(
+                    name='test.test2.optional_arg2', field_type=str,
+                    default_value='val2', value='foo')])])
 
     def test_remappings(self):
         config = LaunchConfig()
