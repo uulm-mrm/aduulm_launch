@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <package format="3">
     <name>aduulm_launch</name>
-    <version>0.0.0</version>
+    <version>0.0.1</version>
     <description>aduulm_launch</description>
     <author>Jan Strohbeck</author>
     <maintainer email="jan.strohbeck@uni-ulm.de">Jan Strohbeck</maintainer>
-    <license>Proprietary, (c) 2023 Ulm University, Institute of Measurement, Control and Microtechnology</license>
+    <license>Apache 2.0</license>
     <buildtool_depend>ament_cmake</buildtool_depend>
 
     <depend>aduulm_launch_lib</depend>
