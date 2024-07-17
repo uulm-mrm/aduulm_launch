@@ -4,7 +4,8 @@
     <version>0.0.1</version>
     <description>aduulm_launch</description>
     <author>Jan Strohbeck</author>
-    <maintainer email="jan.strohbeck@uni-ulm.de">Jan Strohbeck</maintainer>
+    <author>The MRM Team</author>
+    <maintainer email="johannes.kopp@uni-ulm.de">Johannes Kopp</maintainer>
     <license>Apache 2.0</license>
     <buildtool_depend>ament_cmake</buildtool_depend>
 
