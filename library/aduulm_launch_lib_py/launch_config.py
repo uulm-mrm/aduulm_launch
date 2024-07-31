@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import re
+from collections import OrderedDict
 from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass, \
     Field, MISSING
 from enum import IntEnum
@@ -705,6 +707,96 @@ class LaunchConfig:
     def add_ros2_entity(self, ros2_entity: LaunchDescriptionEntity):
         assert self._getval() is None
         self._getdata().ros2_entities.append(ros2_entity)
+
+    def generate_topic_graphviz(self, f: io.TextIO):
+        @dataclass
+        class TopicInfo:
+            name: str
+            sub_nodes: List[str] = field(default_factory=list)
+            pub_nodes: List[str] = field(default_factory=list)
+            srv_nodes: List[str] = field(default_factory=list)
+            scl_nodes: List[str] = field(default_factory=list)
+
+        topic_infos: Dict[str, TopicInfo] = OrderedDict()
+
+        # generate orchestrator launch config and remappings
+        def cb(cfg: LaunchConfig, mod: LeafLaunch, name: str, _: LaunchGroup):
+            if not isinstance(mod, Node):
+                return
+
+            node_name = f'{cfg.resolve_namespace()}/{name}'
+
+            for list_name, field_name in [
+                ('sub_nodes', 'subscribers'),
+                ('pub_nodes', 'publishers'),
+                ('srv_nodes', 'services'),
+                ('scl_nodes', 'service_clients'),
+            ]:
+                for node_field in getattr(mod, field_name).values():
+                    topic = node_field.topic
+                    if topic in ['/tf_static', '/tf', '/clock']:
+                        continue
+                    assert topic[0] == '/'
+                    if topic not in topic_infos:
+                        topic_infos[topic] = TopicInfo(name=topic)
+                    topic_info = topic_infos[topic]
+                    getattr(topic_info, list_name).append(node_name)
+
+        self.recurse(cb)
+
+        # sort entries
+        topic_infos = OrderedDict(
+            sorted(topic_infos.items(), key=lambda kv: kv[0]))
+        for topic_info in topic_infos.values():
+            for list_name in ['sub_nodes', 'pub_nodes', 'srv_nodes',
+                              'scl_nodes']:
+                setattr(topic_info, list_name, list(sorted(
+                    getattr(topic_info, list_name))))
+
+        print(f'digraph {{', file=f)
+        print(f'rankdir="LR"', file=f)
+
+        node_style = f'shape="box3d"'
+        topic_style = f'shape="octagon"'
+        service_style = f'shape="octagon",style="dashed"'
+        print(f'"node" [{node_style}]', file=f)
+        print(f'"topic" [{topic_style}]', file=f)
+        print(f'"service" [{service_style}]', file=f)
+
+        nodes_to_draw = set(sum([sum(
+            [info.pub_nodes, info.sub_nodes, info.srv_nodes, info.scl_nodes],
+            start=[]) for info in topic_infos.values()], start=[]))
+        nodes_to_draw = list(sorted(list(nodes_to_draw)))
+        for node in nodes_to_draw:
+            print(f'"{node}" [{node_style}]', file=f)
+
+        for topic, info in topic_infos.items():
+            # topic is either normal topic or service topic
+            is_topic = info.pub_nodes or info.sub_nodes
+            is_service = info.srv_nodes or info.scl_nodes
+            assert is_topic != is_service
+
+            if is_topic:
+                color = 'black' if info.pub_nodes else 'red'
+                print(f'"T{topic}" [{topic_style},color="{color}",'
+                      f'label="{topic}"]', file=f)
+                edge_style = f'color="{color}"'
+                for pub_node in info.pub_nodes:
+                    print(f'"{pub_node}" -> "T{topic}" [{edge_style}]', file=f)
+                for sub_node in info.sub_nodes:
+                    print(f'"T{topic}" -> "{sub_node}" [{edge_style}]', file=f)
+            else:
+                color = 'black' if info.srv_nodes else 'red'
+                print(f'"T{topic}" [{service_style},color="{color}",'
+                      f'label="{topic}"]', file=f)
+                edge_style = f'color="{color}",style="dashed"'
+                for srv_node in info.srv_nodes:
+                    print(f'"{srv_node}" -> "T{topic}" [{edge_style}]', file=f)
+                for scl_node in info.scl_nodes:
+                    print(f'"T{topic}" -> "{scl_node}" [{edge_style}]', file=f)
+
+        print('}', file=f)
+
 
 
 @lru_cache(maxsize=256, typed=True)
