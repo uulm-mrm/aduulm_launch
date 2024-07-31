@@ -1,3 +1,4 @@
+import io
 import pathlib
 import unittest
 from aduulm_launch_lib_py.launch_config import LaunchConfig, SaferDict, \
@@ -339,3 +340,37 @@ class LaunchConfigTest(unittest.TestCase):
             'client1': '/ns/myclient',
             'srv1': '/ns/mysrv',
         })
+
+    def test_graphviz_generation(self):
+        config = LaunchConfig()
+        with config.group('test'):
+            _, _, node = self._add_test_node(config)
+            config.add_subscriber(node, name='sub1', topic='/ns/topic1')
+            config.add_subscriber(node, name='sub2', topic='/ns/topic2')
+            config.add_publisher(node, name='pub1', topic='/ns/topic1')
+            config.add_service_client(node, name='client1',
+                                      topic='/ns/service1')
+            config.add_service_client(node, name='client2',
+                                      topic='/ns/service2')
+            config.add_service(node, name='srv1', topic='/ns/service1')
+        f = io.StringIO()
+        config.generate_topic_graphviz(f)
+        self.assertEqual(
+            f.getvalue(),
+            'digraph {\n'
+            'rankdir="LR"\n'
+            '"node" [shape="box3d"]\n'
+            '"topic" [shape="octagon"]\n'
+            '"service" [shape="octagon",style="dashed"]\n'
+            '"/test/test_node" [shape="box3d"]\n'
+            '"T/ns/service1" [shape="octagon",style="dashed",color="black",label="/ns/service1"]\n'
+            '"/test/test_node" -> "T/ns/service1" [color="black",style="dashed"]\n'
+            '"T/ns/service1" -> "/test/test_node" [color="black",style="dashed"]\n'
+            '"T/ns/service2" [shape="octagon",style="dashed",color="red",label="/ns/service2"]\n'
+            '"T/ns/service2" -> "/test/test_node" [color="red",style="dashed"]\n'
+            '"T/ns/topic1" [shape="octagon",color="black",label="/ns/topic1"]\n'
+            '"/test/test_node" -> "T/ns/topic1" [color="black"]\n'
+            '"T/ns/topic1" -> "/test/test_node" [color="black"]\n'
+            '"T/ns/topic2" [shape="octagon",color="red",label="/ns/topic2"]\n'
+            '"T/ns/topic2" -> "/test/test_node" [color="red"]\n'
+            '}\n')
