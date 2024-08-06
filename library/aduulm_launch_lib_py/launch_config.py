@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import re
-from collections import OrderedDict
 from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass, \
     Field, MISSING
 from enum import IntEnum
@@ -14,7 +13,6 @@ from typing import cast, Dict, Any, Tuple, List, Callable, Generator, Concatenat
     ParamSpec, Literal, Optional, TypeVar, Generic, Union, get_args, get_origin
 
 import yaml
-
 
 K = TypeVar('K')
 V = TypeVar('V')
@@ -717,7 +715,7 @@ class LaunchConfig:
             srv_nodes: List[str] = field(default_factory=list)
             scl_nodes: List[str] = field(default_factory=list)
 
-        topic_infos: Dict[str, TopicInfo] = OrderedDict()
+        topic_infos: Dict[str, TopicInfo] = dict()
 
         # generate orchestrator launch config and remappings
         def cb(cfg: LaunchConfig, mod: LeafLaunch, name: str, _: LaunchGroup):
@@ -744,15 +742,6 @@ class LaunchConfig:
 
         self.recurse(cb)
 
-        # sort entries
-        topic_infos = OrderedDict(
-            sorted(topic_infos.items(), key=lambda kv: kv[0]))
-        for topic_info in topic_infos.values():
-            for list_name in ['sub_nodes', 'pub_nodes', 'srv_nodes',
-                              'scl_nodes']:
-                setattr(topic_info, list_name, list(sorted(
-                    getattr(topic_info, list_name))))
-
         print(f'digraph {{', file=f)
         print(f'rankdir="LR"', file=f)
 
@@ -760,13 +749,15 @@ class LaunchConfig:
         topic_style = f'shape="note"'
         service_style = f'shape="note",style="dashed"'
 
-        nodes_to_draw = set(sum([sum(
+        nodes = set(sum([sum(
             [info.pub_nodes, info.sub_nodes, info.srv_nodes, info.scl_nodes],
             start=[]) for info in topic_infos.values()], start=[]))
-        nodes_to_draw = list(sorted(list(nodes_to_draw)))
-        nodes_to_draw.append('/node')
+        items = [(node, 'node') for node in nodes] + list(topic_infos.items())
+        items = list(sorted(items, key=lambda elem: elem[0]))
+        items.append(('/node', 'node'))
+
         namespace = '/'
-        for name in nodes_to_draw:
+        for name, info in items:
             # close namespace/cluster:
             while name[:len(namespace)] != namespace:
                 namespace = namespace[:namespace[:-1].rindex('/') + 1]
@@ -782,34 +773,38 @@ class LaunchConfig:
                 cluster_name = namespace.replace("/", "_").strip('_')
                 print(f'subgraph cluster_{cluster_name} {{', file=f)
                 print(f'label="{namespace}"', file=f)
-            print(f'"{name}" [label="{short_name}",{node_style}]', file=f)
-        print(f'"topic" [{topic_style}]', file=f)
-        print(f'"service" [{service_style}]', file=f)
 
-        for topic, info in topic_infos.items():
-            # topic is either normal topic or service topic
+            if info == 'node':
+                # draw node
+                print(f'"{name}" [label="{short_name}",{node_style}]', file=f)
+                continue
+
+            # draw topic, either normal topic or service topic
             is_topic = info.pub_nodes or info.sub_nodes
             is_service = info.srv_nodes or info.scl_nodes
             assert is_topic != is_service
 
             if is_topic:
                 color = 'black' if info.pub_nodes else 'red'
-                print(f'"T{topic}" [{topic_style},color="{color}",'
-                      f'label="{topic}"]', file=f)
+                print(f'"T{name}" [{topic_style},color="{color}",'
+                      f'label="{short_name}"]', file=f)
                 edge_style = f'color="{color}"'
                 for pub_node in info.pub_nodes:
-                    print(f'"{pub_node}" -> "T{topic}" [{edge_style}]', file=f)
+                    print(f'"{pub_node}" -> "T{name}" [{edge_style}]', file=f)
                 for sub_node in info.sub_nodes:
-                    print(f'"T{topic}" -> "{sub_node}" [{edge_style}]', file=f)
+                    print(f'"T{name}" -> "{sub_node}" [{edge_style}]', file=f)
             else:
                 color = 'black' if info.srv_nodes else 'red'
-                print(f'"T{topic}" [{service_style},color="{color}",'
-                      f'label="{topic}"]', file=f)
+                print(f'"T{name}" [{service_style},color="{color}",'
+                      f'label="{short_name}"]', file=f)
                 edge_style = f'color="{color}",style="dashed"'
                 for srv_node in info.srv_nodes:
-                    print(f'"{srv_node}" -> "T{topic}" [{edge_style}]', file=f)
+                    print(f'"{srv_node}" -> "T{name}" [{edge_style}]', file=f)
                 for scl_node in info.scl_nodes:
-                    print(f'"T{topic}" -> "{scl_node}" [{edge_style}]', file=f)
+                    print(f'"T{name}" -> "{scl_node}" [{edge_style}]', file=f)
+
+        print(f'"topic" [{topic_style}]', file=f)
+        print(f'"service" [{service_style}]', file=f)
 
         print('}', file=f)
 
