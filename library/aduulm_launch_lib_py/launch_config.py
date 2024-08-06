@@ -757,18 +757,34 @@ class LaunchConfig:
         print(f'rankdir="LR"', file=f)
 
         node_style = f'shape="box3d"'
-        topic_style = f'shape="octagon"'
-        service_style = f'shape="octagon",style="dashed"'
-        print(f'"node" [{node_style}]', file=f)
-        print(f'"topic" [{topic_style}]', file=f)
-        print(f'"service" [{service_style}]', file=f)
+        topic_style = f'shape="note"'
+        service_style = f'shape="note",style="dashed"'
 
         nodes_to_draw = set(sum([sum(
             [info.pub_nodes, info.sub_nodes, info.srv_nodes, info.scl_nodes],
             start=[]) for info in topic_infos.values()], start=[]))
         nodes_to_draw = list(sorted(list(nodes_to_draw)))
-        for node in nodes_to_draw:
-            print(f'"{node}" [{node_style}]', file=f)
+        nodes_to_draw.append('/node')
+        namespace = '/'
+        for name in nodes_to_draw:
+            # close namespace/cluster:
+            while name[:len(namespace)] != namespace:
+                namespace = namespace[:namespace[:-1].rindex('/') + 1]
+                assert namespace[-1] == '/'
+                print(f'}}', file=f)
+            short_name = name[len(namespace):]
+            # open namespace/cluster:
+            while '/' in short_name:
+                pos = short_name.index('/')
+                namespace = f'{namespace}{short_name[:pos + 1]}'
+                assert namespace[-1] == '/'
+                short_name = name[len(namespace):]
+                cluster_name = namespace.replace("/", "_").strip('_')
+                print(f'subgraph cluster_{cluster_name} {{', file=f)
+                print(f'label="{namespace}"', file=f)
+            print(f'"{name}" [label="{short_name}",{node_style}]', file=f)
+        print(f'"topic" [{topic_style}]', file=f)
+        print(f'"service" [{service_style}]', file=f)
 
         for topic, info in topic_infos.items():
             # topic is either normal topic or service topic
