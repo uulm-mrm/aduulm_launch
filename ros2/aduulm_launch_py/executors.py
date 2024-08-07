@@ -35,9 +35,7 @@ def execute_with_params(gen_config: Callable[Concatenate[LaunchConfig, PT, P], N
     config = LaunchConfig() if _initial_config is None else _initial_config
     config, sys_args = call_config_with_params(
         config, gen_config, *args, **kwargs)
-    if sys_args.list_params:
-        list_params_and_exit(config)
-    return _execute(config, _debug=sys_args.debug, _exit=_exit, _extra_ros2_modules=_extra_ros2_modules)
+    return _execute(config, sys_args=sys_args, _exit=_exit, _extra_ros2_modules=_extra_ros2_modules)
 
 
 def execute(gen_config: Callable[Concatenate[LaunchConfig, P], None],
@@ -45,9 +43,7 @@ def execute(gen_config: Callable[Concatenate[LaunchConfig, P], None],
     config = LaunchConfig()
     sys_args = _parse_args(config)
     gen_config(config, *args, **kwargs)
-    if sys_args.list_params:
-        list_params_and_exit(config)
-    return _execute(config, _debug=sys_args.debug, _exit=_exit, _extra_ros2_modules=_extra_ros2_modules)
+    return _execute(config, sys_args=sys_args, _exit=_exit, _extra_ros2_modules=_extra_ros2_modules)
 
 
 def _parse_args(config: LaunchConfig):
@@ -57,6 +53,7 @@ def _parse_args(config: LaunchConfig):
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-o', '--overrides_file', type=str)
     parser.add_argument('-l', '--list_params', action='store_true')
+    parser.add_argument('-g', '--export_graphviz', action='store_true')
     sys_args = parser.parse_args()
     if sys_args.overrides_file:
         overrides_file = pathlib.Path(sys_args.overrides_file)
@@ -65,18 +62,27 @@ def _parse_args(config: LaunchConfig):
     return sys_args
 
 
-def _execute(config: LaunchConfig, _debug: bool = False, _exit=True, _extra_ros2_modules: List[LaunchDescriptionEntity] = []):
+def _execute(config: LaunchConfig, sys_args, _exit=True, _extra_ros2_modules: List[LaunchDescriptionEntity] = []):
+    if sys_args.export_graphviz:
+        gv_path = pathlib.Path('/tmp') / 'launch.gv'
+        with open(gv_path, 'w') as f:
+            config.generate_topic_graphviz(f)
+        print(f'exported graphviz file to {str(gv_path)}')
+        print(f'now launch "dot -Tpdf {str(gv_path)} -o {str(gv_path)}.pdf"')
+        exit(0)
+    if sys_args.list_params:
+        list_params(config)
+        sys.exit(0)
     ret = execute_config_with_ros2_launch(
-        config, debug=_debug, extra_modules=_extra_ros2_modules)
+        config, debug=sys_args.debug, extra_modules=_extra_ros2_modules)
     if _exit:
         sys.exit(ret)
     return ret
 
 
-def list_params_and_exit(config: LaunchConfig):
+def list_params(config: LaunchConfig):
     print(f'the following params are available to override:')
     for type1, fields in config._getavail_overrides():
         print(f'from {type1}:')
         for field in fields:
             print(f'  {field.name}: {repr(field.value)} ({field.field_type})')
-    sys.exit(0)

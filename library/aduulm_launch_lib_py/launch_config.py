@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import re
 from dataclasses import fields, _MISSING_TYPE, is_dataclass, field, dataclass, \
     Field, MISSING
@@ -12,7 +13,6 @@ from typing import cast, Dict, Any, Tuple, List, Callable, Generator, Concatenat
     ParamSpec, Literal, Optional, TypeVar, Generic, Union, get_args, get_origin
 
 import yaml
-
 
 K = TypeVar('K')
 V = TypeVar('V')
@@ -705,6 +705,144 @@ class LaunchConfig:
     def add_ros2_entity(self, ros2_entity: LaunchDescriptionEntity):
         assert self._getval() is None
         self._getdata().ros2_entities.append(ros2_entity)
+
+    def generate_topic_graphviz(self, f: io.TextIO):
+        @dataclass
+        class TopicInfo:
+            name: str
+            sub_nodes: List[str] = field(default_factory=list)
+            pub_nodes: List[str] = field(default_factory=list)
+            srv_nodes: List[str] = field(default_factory=list)
+            scl_nodes: List[str] = field(default_factory=list)
+
+        # config
+        intercept_topic_pattern = re.compile(r'(/intercepted/.*/sub/).*')
+        max_n_subs = 3
+
+        topic_infos: Dict[str, TopicInfo] = dict()
+
+        # generate orchestrator launch config and remappings
+        def cb(cfg: LaunchConfig, mod: LeafLaunch, name: str, _: LaunchGroup):
+            if not isinstance(mod, Node):
+                return
+
+            node_name = f'{cfg.resolve_namespace()}/{name}'
+            node_name.replace('/intercepted/', '/')
+
+            for list_name, field_name in [
+                ('sub_nodes', 'subscribers'),
+                ('sub_nodes', 'time_sync_subscribers'),
+                ('pub_nodes', 'publishers'),
+                ('srv_nodes', 'services'),
+                ('scl_nodes', 'service_clients'),
+            ]:
+                node_field = getattr(mod, field_name)
+                if isinstance(node_field, list):
+                    # time_sync_subscribers is a List[TimeSyncInfo]
+                    topics = [topic for info in node_field
+                              for topic in info.topics]
+                else:
+                    # others are a Dict[str, *Info]
+                    topics = [info.topic for info in node_field.values()]
+
+                for topic in topics:
+                    assert topic[0] == '/'
+
+                    # remove interception in topic name
+                    matches = intercept_topic_pattern.fullmatch(topic)
+                    if matches:
+                        topic = topic.replace(matches.group(1), '/')
+
+                    if topic not in topic_infos:
+                        topic_infos[topic] = TopicInfo(name=topic)
+                    topic_info = topic_infos[topic]
+                    getattr(topic_info, list_name).append(node_name)
+
+        self.recurse(cb)
+
+        print(f'digraph {{', file=f)
+        print(f'rankdir="LR"', file=f)
+
+        node_style = f'shape="box3d"'
+        topic_style = f'shape="note"'
+        service_style = f'shape="note",style="dashed"'
+
+        nodes = set(sum([sum(
+            [info.pub_nodes, info.sub_nodes, info.srv_nodes, info.scl_nodes],
+            start=[]) for info in topic_infos.values()], start=[]))
+        items = [(node, 'node') for node in nodes] + list(topic_infos.items())
+        items = list(sorted(items, key=lambda elem: elem[0]))
+        items.append(('/node', 'node'))
+
+        # draw nodes
+        namespace = '/'
+        for name, info in items:
+            # close namespace/cluster:
+            while name[:len(namespace)] != namespace:
+                namespace = namespace[:namespace[:-1].rindex('/') + 1]
+                assert namespace[-1] == '/'
+                print(f'}}', file=f)
+            short_name = name[len(namespace):]
+            # open namespace/cluster:
+            while '/' in short_name:
+                pos = short_name.index('/')
+                namespace = f'{namespace}{short_name[:pos + 1]}'
+                assert namespace[-1] == '/'
+                short_name = name[len(namespace):]
+                cluster_name = namespace.replace("/", "_").strip('_')
+                print(f'subgraph cluster_{cluster_name} {{', file=f)
+                print(f'label="{namespace}"', file=f)
+
+            if info == 'node':
+                # draw node
+                print(f'"{name}" [label="{short_name}",{node_style}]', file=f)
+                continue
+
+            # draw topic, either normal topic or service topic
+            is_topic = info.pub_nodes or info.sub_nodes
+            is_service = info.srv_nodes or info.scl_nodes
+            assert is_topic != is_service
+            if is_topic:
+                color = 'black' if info.pub_nodes else 'red'
+                print(f'"T{name}" [{topic_style},color="{color}",'
+                      f'label="{short_name}"]', file=f)
+            else:
+                color = 'black' if info.srv_nodes else 'red'
+                print(f'"T{name}" [{service_style},color="{color}",'
+                      f'label="{short_name}"]', file=f)
+
+        # draw edges
+        for name, info in items:
+            if info == 'node':
+                continue
+            is_topic = info.pub_nodes or info.sub_nodes
+            if is_topic:
+                color = 'black' if info.pub_nodes else 'red'
+                edge_style = f'color="{color}"'
+                for pub_node in info.pub_nodes:
+                    print(f'"{pub_node}" -> "T{name}" [{edge_style}]', file=f)
+                if len(info.sub_nodes) > max_n_subs:
+                    print(f'skipping topic {name} with '
+                          f'{len(info.sub_nodes)} subs')
+                    continue
+                for sub_node in info.sub_nodes:
+                    print(f'"T{name}" -> "{sub_node}" [{edge_style}]', file=f)
+            else:
+                color = 'black' if info.srv_nodes else 'red'
+                edge_style = f'color="{color}",style="dashed"'
+                for srv_node in info.srv_nodes:
+                    print(f'"{srv_node}" -> "T{name}" [{edge_style}]', file=f)
+                if len(info.scl_nodes) > max_n_subs:
+                    print(f'skipping service {name} with '
+                          f'{len(info.scl_nodes)} clients')
+                    continue
+                for scl_node in info.scl_nodes:
+                    print(f'"T{name}" -> "{scl_node}" [{edge_style}]', file=f)
+
+        print(f'"topic" [{topic_style}]', file=f)
+        print(f'"service" [{service_style}]', file=f)
+
+        print('}', file=f)
 
 
 @lru_cache(maxsize=256, typed=True)

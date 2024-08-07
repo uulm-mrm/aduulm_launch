@@ -1,3 +1,4 @@
+import io
 import pathlib
 import unittest
 from aduulm_launch_lib_py.launch_config import LaunchConfig, SaferDict, \
@@ -339,3 +340,43 @@ class LaunchConfigTest(unittest.TestCase):
             'client1': '/ns/myclient',
             'srv1': '/ns/mysrv',
         })
+
+    def test_graphviz_generation(self):
+        config = LaunchConfig()
+        with config.group('test'):
+            _, _, node = self._add_test_node(config)
+            config.add_subscriber(node, name='sub1', topic='/ns/topic1')
+            config.add_subscriber(node, name='sub2', topic='/ns/topic2')
+            config.add_publisher(node, name='pub1', topic='/ns/topic1')
+            config.add_service_client(node, name='client1',
+                                      topic='/ns/service1')
+            config.add_service_client(node, name='client2',
+                                      topic='/ns/service2')
+            config.add_service(node, name='srv1', topic='/ns/service1')
+        f = io.StringIO()
+        config.generate_topic_graphviz(f)
+        self.assertEqual(
+            f.getvalue(),
+            'digraph {\n'
+            'rankdir="LR"\n'
+            'subgraph cluster_ns {\n'
+            'label="/ns/"\n'
+            '"T/ns/service1" [shape="note",style="dashed",color="black",label="service1"]\n'
+            '"T/ns/service2" [shape="note",style="dashed",color="red",label="service2"]\n'
+            '"T/ns/topic1" [shape="note",color="black",label="topic1"]\n'
+            '"T/ns/topic2" [shape="note",color="red",label="topic2"]\n'
+            '}\n'
+            'subgraph cluster_test {\n'
+            'label="/test/"\n'
+            '"/test/test_node" [label="test_node",shape="box3d"]\n'
+            '}\n'
+            '"/node" [label="node",shape="box3d"]\n'
+            '"/test/test_node" -> "T/ns/service1" [color="black",style="dashed"]\n'
+            '"T/ns/service1" -> "/test/test_node" [color="black",style="dashed"]\n'
+            '"T/ns/service2" -> "/test/test_node" [color="red",style="dashed"]\n'
+            '"/test/test_node" -> "T/ns/topic1" [color="black"]\n'
+            '"T/ns/topic1" -> "/test/test_node" [color="black"]\n'
+            '"T/ns/topic2" -> "/test/test_node" [color="red"]\n'
+            '"topic" [shape="note"]\n'
+            '"service" [shape="note",style="dashed"]\n'
+            '}\n')
