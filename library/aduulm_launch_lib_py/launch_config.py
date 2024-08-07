@@ -715,6 +715,10 @@ class LaunchConfig:
             srv_nodes: List[str] = field(default_factory=list)
             scl_nodes: List[str] = field(default_factory=list)
 
+        # config
+        intercept_topic_pattern = re.compile(r'(/intercepted/.*/sub/).*')
+        max_n_subs = 3
+
         topic_infos: Dict[str, TopicInfo] = dict()
 
         # generate orchestrator launch config and remappings
@@ -723,6 +727,7 @@ class LaunchConfig:
                 return
 
             node_name = f'{cfg.resolve_namespace()}/{name}'
+            node_name.replace('/intercepted/', '/')
 
             for list_name, field_name in [
                 ('sub_nodes', 'subscribers'),
@@ -732,9 +737,13 @@ class LaunchConfig:
             ]:
                 for node_field in getattr(mod, field_name).values():
                     topic = node_field.topic
-                    if topic in ['/tf_static', '/tf', '/clock']:
-                        continue
                     assert topic[0] == '/'
+
+                    # remove interception in topic name
+                    matches = intercept_topic_pattern.fullmatch(topic)
+                    if matches:
+                        topic = topic.replace(matches.group(1), '/')
+
                     if topic not in topic_infos:
                         topic_infos[topic] = TopicInfo(name=topic)
                     topic_info = topic_infos[topic]
@@ -756,6 +765,7 @@ class LaunchConfig:
         items = list(sorted(items, key=lambda elem: elem[0]))
         items.append(('/node', 'node'))
 
+        # draw nodes
         namespace = '/'
         for name, info in items:
             # close namespace/cluster:
@@ -783,23 +793,40 @@ class LaunchConfig:
             is_topic = info.pub_nodes or info.sub_nodes
             is_service = info.srv_nodes or info.scl_nodes
             assert is_topic != is_service
-
             if is_topic:
                 color = 'black' if info.pub_nodes else 'red'
                 print(f'"T{name}" [{topic_style},color="{color}",'
                       f'label="{short_name}"]', file=f)
-                edge_style = f'color="{color}"'
-                for pub_node in info.pub_nodes:
-                    print(f'"{pub_node}" -> "T{name}" [{edge_style}]', file=f)
-                for sub_node in info.sub_nodes:
-                    print(f'"T{name}" -> "{sub_node}" [{edge_style}]', file=f)
             else:
                 color = 'black' if info.srv_nodes else 'red'
                 print(f'"T{name}" [{service_style},color="{color}",'
                       f'label="{short_name}"]', file=f)
+
+        # draw edges
+        for name, info in items:
+            if info == 'node':
+                continue
+            is_topic = info.pub_nodes or info.sub_nodes
+            if is_topic:
+                color = 'black' if info.pub_nodes else 'red'
+                edge_style = f'color="{color}"'
+                for pub_node in info.pub_nodes:
+                    print(f'"{pub_node}" -> "T{name}" [{edge_style}]', file=f)
+                if len(info.sub_nodes) > max_n_subs:
+                    print(f'skipping topic {name} with '
+                          f'{len(info.sub_nodes)} subs')
+                    continue
+                for sub_node in info.sub_nodes:
+                    print(f'"T{name}" -> "{sub_node}" [{edge_style}]', file=f)
+            else:
+                color = 'black' if info.srv_nodes else 'red'
                 edge_style = f'color="{color}",style="dashed"'
                 for srv_node in info.srv_nodes:
                     print(f'"{srv_node}" -> "T{name}" [{edge_style}]', file=f)
+                if len(info.scl_nodes) > max_n_subs:
+                    print(f'skipping service {name} with '
+                          f'{len(info.scl_nodes)} clients')
+                    continue
                 for scl_node in info.scl_nodes:
                     print(f'"T{name}" -> "{scl_node}" [{edge_style}]', file=f)
 
@@ -807,7 +834,6 @@ class LaunchConfig:
         print(f'"service" [{service_style}]', file=f)
 
         print('}', file=f)
-
 
 
 @lru_cache(maxsize=256, typed=True)
