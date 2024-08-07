@@ -731,12 +731,21 @@ class LaunchConfig:
 
             for list_name, field_name in [
                 ('sub_nodes', 'subscribers'),
+                ('sub_nodes', 'time_sync_subscribers'),
                 ('pub_nodes', 'publishers'),
                 ('srv_nodes', 'services'),
                 ('scl_nodes', 'service_clients'),
             ]:
-                for node_field in getattr(mod, field_name).values():
-                    topic = node_field.topic
+                node_field = getattr(mod, field_name)
+                if isinstance(node_field, list):
+                    # time_sync_subscribers is a List[TimeSyncInfo]
+                    topics = [topic for info in node_field
+                              for topic in info.topics]
+                else:
+                    # others are a Dict[str, *Info]
+                    topics = [info.topic for info in node_field.values()]
+
+                for topic in topics:
                     assert topic[0] == '/'
 
                     # remove interception in topic name
