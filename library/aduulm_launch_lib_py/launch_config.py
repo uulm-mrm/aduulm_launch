@@ -534,16 +534,16 @@ class LaunchConfig:
         lst = []
 
         def visit_field(f: Field[Any], value: Any, path: List[str]):
+            path = [*path, f.name]
             if is_dataclass(f.type):
-                for f in fields(f.type):
-                    visit_field(f, getattr(value, f.name), path + [f.name])
+                for f2 in fields(f.type):
+                    visit_field(f2, getattr(value, f2.name), path)
                 return
-            abs_path = '.'.join([*path, f.name])
             default_val = f.default if f.default != MISSING \
                 else f.default_factory() if f.default_factory != MISSING \
                 else None
             lst.append(OverridableField(
-                name=abs_path, field_type=f.type, default_value=default_val,
+                name='.'.join(path), field_type=f.type, default_value=default_val,
                 value=value))
 
         for f in fields(params_t):
