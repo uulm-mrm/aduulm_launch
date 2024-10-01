@@ -40,7 +40,7 @@ class ConverterRos2Test(unittest.TestCase):
     def test_include_ros(self):
         config = LaunchConfig()
         include_args: dict[str, Any] = dict(
-            package='test_package', launchfile='test_launch')
+            package='lifecycle', launchfile='lifecycle_demo_launch.py')
         args: dict[str, Any] = dict(arg1='value1')
         config.add_sublaunch_ros(name='sublaunch', **include_args, args=args)
         res = convert_config_to_ros2_launch(config)
