@@ -1,15 +1,17 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>aduulm_launch_lib</name>
-  <version>0.0.3</version>
-  <description>The aduulm_launch package</description>
+    <name>aduulm_launch_lib</name>
+    <version>0.0.3</version>
+    <description>The aduulm_launch package</description>
 
-  <maintainer email="jan.strohbeck@uni-ulm.de">Jan Strohbeck</maintainer>
-  <license>Proprietary, (c) 2023 Ulm University, Institute of Measurement, Control and Microtechnology</license>
+    <author>Jan Strohbeck</author>
+    <author>The MRM Team</author>
+    <maintainer email="johannes.kopp@uni-ulm.de">Johannes Kopp</maintainer>
+    <license>Apache 2.0</license>
 
-  <build_depend>aduulm_cmake_tools</build_depend>
+    <build_depend>aduulm_cmake_tools</build_depend>
 
-  <export>
-    <build_type>cmake</build_type>
-  </export>
+    <export>
+      <build_type>cmake</build_type>
+    </export>
 </package>
