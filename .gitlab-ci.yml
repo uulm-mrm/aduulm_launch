@@ -1,7 +1,7 @@
 variables:
   GIT_STRATEGY: none
   image_aduulm_rolling: mrm-git.e-technik.uni-ulm.de:4567/aduulm/docker_images/aduulm-ros2-rolling:latest
-  image_aduulm_iron: mrm-git.e-technik.uni-ulm.de:4567/aduulm/docker_images/aduulm-ros2-iron:latest
+  image_aduulm_jazzy: mrm-git.e-technik.uni-ulm.de:4567/aduulm/docker_images/aduulm-ros2-jazzy:latest
 
 stages:
   - library
@@ -12,6 +12,14 @@ stages:
   stage: library
   script:
     - build_repo_with_dependencies_ros2.sh release aduulm_launch_lib
+
+build_library_jazzy:
+  extends: .build_library
+  image: $image_aduulm_jazzy
+
+build_library_rolling:
+  extends: .build_library
+  image: $image_aduulm_rolling
 
 .test_library:
   stage: library_test
@@ -25,6 +33,16 @@ stages:
     - build_repo_with_dependencies_ros2.sh coverage aduulm_launch_lib
     - source ./colcon_build/install/setup.bash
     - pytest src/aduulm_launch/library/test/python --junitxml=report_lib_python.xml
+
+test_library_jazzy:
+  extends: .test_library
+  needs: [build_library_jazzy]
+  image: $image_aduulm_jazzy
+
+test_library_rolling:
+  extends: .test_library
+  needs: [build_library_rolling]
+  image: $image_aduulm_rolling
 
 .build_ros:
   stage: ros
@@ -45,25 +63,9 @@ stages:
     - source ./colcon_build/install/setup.bash
     - pytest src/aduulm_launch/ros2/test/python --junitxml=report_ros_python.xml
 
-build_library_iron:
-  extends: .build_library
-  image: $image_aduulm_iron
-
-test_library_iron:
-  extends: .test_library
-  image: $image_aduulm_iron
-
-build_ros_iron:
+build_ros_jazzy:
   extends: .build_ros
-  image: $image_aduulm_iron
-
-build_library_rolling:
-  extends: .build_library
-  image: $image_aduulm_rolling
-
-test_library_rolling:
-  extends: .test_library
-  image: $image_aduulm_rolling
+  image: $image_aduulm_jazzy
 
 build_ros_rolling:
   extends: .build_ros
