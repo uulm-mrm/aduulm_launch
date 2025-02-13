@@ -25,7 +25,12 @@ def call_config_with_params(config: LaunchConfig, gen_config: Callable[Concatena
     assert is_dataclass(params_cls) and isinstance(params_cls, type)
     params = config.instantiate_dataclass_from_overrides(params_cls)
     assert name not in kwargs
-    gen_config(config, params, *args, **kwargs)
+    if sys_args.gui:
+        from aduulm_launch_py.gui import AduulmLaunchGui
+        config = AduulmLaunchGui(
+            gen_config, params, config).gen_config_with_overrides()
+    else:
+        gen_config(config, params, *args, **kwargs)
     config.check_overrides_counts()
     return config, sys_args
 
@@ -54,6 +59,7 @@ def _parse_args(config: LaunchConfig):
     parser.add_argument('-o', '--overrides_file', type=str)
     parser.add_argument('-l', '--list_params', action='store_true')
     parser.add_argument('-g', '--export_graphviz', action='store_true')
+    parser.add_argument('--gui', action='store_true')
     sys_args = parser.parse_args()
     if sys_args.overrides_file:
         overrides_file = pathlib.Path(sys_args.overrides_file)
